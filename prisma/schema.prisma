@@ -1,0 +1,22 @@
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ------------------------------------------------------
+// User Model
+// ------------------------------------------------------
+// Represents the "User" table in the PostgreSQL database.
+// Stores basic authentication details (email, password).
+model User {
+  id        Int      @id @default(autoincrement()) // Primary Key
+  email     String   @unique                       // Must be unique for login
+  password  String                                 // Hashed password
+  createdAt DateTime @default(now())               // Auto-generated timestamp
+  updatedAt DateTime @updatedAt                    // Auto-updated timestamp
+}
