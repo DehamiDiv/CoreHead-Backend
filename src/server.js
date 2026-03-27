@@ -4,6 +4,7 @@ const cors = require('cors');
 
 // Import our custom Authentication routes
 const authRoutes = require('./routes/authRoutes');
+const templateRoutes = require('./routes/templateRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -22,6 +23,7 @@ app.get('/', (req, res) => {
 // ==========================================
 // This tells Express: "If any request starts with /api/auth, send it to authRoutes!"
 app.use('/api/auth', authRoutes);
+app.use('/api/templates', templateRoutes);
 
 // Start the server
 app.listen(PORT, () => {
