@@ -1,16 +1,11 @@
 const express = require('express');
+const router = express.Router();
 const authController = require('../controllers/authController');
 
-const router = express.Router();
+// POST /api/auth/register
+router.post('/register', authController.register);
 
-// ==========================================
-// ROUTER LAYER (Connecting URL paths to Controllers)
-// ==========================================
-
-// When frontend hits: POST /api/auth/register -> Send it to authController.register()
-router.post('/register', authController.register.bind(authController));
-
-// When frontend hits: POST /api/auth/login -> Send it to authController.login()
-router.post('/login', authController.login.bind(authController));
+// POST /api/auth/login
+router.post('/login', authController.login);
 
 module.exports = router;
