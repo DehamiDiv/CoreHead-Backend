@@ -39,7 +39,17 @@ const login = async (req, res) => {
     }
 };
 
+const getCurrentUser = async (req, res) => {
+    try {
+        // req.user contains the decoded JWT token payload (id, email) added by authMiddleware
+        res.status(200).json({ user: req.user });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch user details' });
+    }
+};
+
 module.exports = {
     register,
-    login
+    login,
+    getCurrentUser
 };
