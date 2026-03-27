@@ -14,9 +14,27 @@ datasource db {
 // Represents the "User" table in the PostgreSQL database.
 // Stores basic authentication details (email, password).
 model User {
-  id        Int      @id @default(autoincrement()) // Primary Key
-  email     String   @unique                       // Must be unique for login
+  id        Int        @id @default(autoincrement()) // Primary Key
+  email     String     @unique                       // Must be unique for login
   password  String                                 // Hashed password
-  createdAt DateTime @default(now())               // Auto-generated timestamp
-  updatedAt DateTime @updatedAt                    // Auto-updated timestamp
+  templates Template[]                               // A user can create many templates
+  createdAt DateTime   @default(now())               // Auto-generated timestamp
+  updatedAt DateTime   @updatedAt                    // Auto-updated timestamp
+}
+
+// ------------------------------------------------------
+// Template Model (Visual Blog Builder Layouts)
+// ------------------------------------------------------
+// Stores the drag-and-drop layout schemas designed by Admins
+model Template {
+  id          Int      @id @default(autoincrement())
+  name        String                                // Name of the layout (e.g., Default Single Post)
+  type        String                                // e.g., "single_post" or "archive"
+  category    String?                               // Optional: For category-specific layouts
+  status      String   @default("draft")            // "draft" or "published"
+  layoutJson  Json                                  // Storing the layout as structured JSON
+  authorId    Int                                   // Admin user who created it
+  author      User     @relation(fields: [authorId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
