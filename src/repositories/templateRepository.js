@@ -17,10 +17,24 @@ const getTemplateById = async (id) => {
     });
 };
 
-const updateTemplate = async (id, data) => {
+const updateTemplate = async (id, data, newVersion) => {
     return await prisma.template.update({
         where: { id: parseInt(id) },
-        data
+        data: {
+            ...data,
+            version: newVersion,
+        }
+    });
+};
+
+const saveTemplateHistory = async (templateId, version, layoutJson, updatedBy) => {
+    return await prisma.templateHistory.create({
+        data: {
+            templateId: parseInt(templateId),
+            version,
+            layoutJson,
+            updatedBy
+        }
     });
 };
 
@@ -35,5 +49,6 @@ module.exports = {
     getAllTemplates,
     getTemplateById,
     updateTemplate,
-    deleteTemplate
+    deleteTemplate,
+    saveTemplateHistory
 };

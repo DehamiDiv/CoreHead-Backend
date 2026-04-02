@@ -27,8 +27,24 @@ const getTemplateById = async (id) => {
     return await templateRepo.getTemplateById(id);
 };
 
-const updateTemplate = async (id, templateData) => {
-    return await templateRepo.updateTemplate(id, templateData);
+const updateTemplate = async (id, templateData, userId) => {
+    // 1. Fetch current template before updating
+    const currentTemplate = await templateRepo.getTemplateById(id);
+    if (!currentTemplate) {
+        throw new Error("Template not found for versioning");
+    }
+
+    // 2. Save current state to history
+    await templateRepo.saveTemplateHistory(
+        currentTemplate.id,
+        currentTemplate.version,
+        currentTemplate.layoutJson,
+        userId
+    );
+
+    // 3. Increment version and save new updates
+    const nextVersion = currentTemplate.version + 1;
+    return await templateRepo.updateTemplate(id, templateData, nextVersion);
 };
 
 const deleteTemplate = async (id) => {
