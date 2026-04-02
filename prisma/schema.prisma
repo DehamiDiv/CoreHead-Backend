@@ -18,6 +18,7 @@ model User {
   email     String     @unique                       // Must be unique for login
   password  String                                 // Hashed password
   templates Template[]                               // A user can create many templates
+  posts     Post[]                                   // A user can author many posts
   createdAt DateTime   @default(now())               // Auto-generated timestamp
   updatedAt DateTime   @updatedAt                    // Auto-updated timestamp
 }
@@ -34,6 +35,40 @@ model Template {
   status      String   @default("draft")            // "draft" or "published"
   layoutJson  Json                                  // Storing the layout as structured JSON
   authorId    Int                                   // Admin user who created it
+  author      User     @relation(fields: [authorId], references: [id])
+  version     Int      @default(1)                  // Layout version tracking
+  history     TemplateHistory[]                     // Previous versions of this layout
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ------------------------------------------------------
+// TemplateHistory Model (Versioning)
+// ------------------------------------------------------
+// Stores previous versions of templates allowing for rollback
+model TemplateHistory {
+  id          Int      @id @default(autoincrement())
+  templateId  Int
+  template    Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  version     Int
+  layoutJson  Json
+  updatedBy   Int      // User ID who made the edit
+  createdAt   DateTime @default(now())
+}
+
+// ------------------------------------------------------
+// Post Model (Dynamic Blog Data)
+// ------------------------------------------------------
+// Actual blog content to be injected into layouts
+model Post {
+  id          Int      @id @default(autoincrement())
+  title       String
+  slug        String   @unique
+  excerpt     String?
+  content     String
+  imageUrl    String?
+  status      String   @default("published")
+  authorId    Int
   author      User     @relation(fields: [authorId], references: [id])
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
