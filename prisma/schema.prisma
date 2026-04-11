@@ -18,7 +18,8 @@ model User {
   email     String     @unique                       // Must be unique for login
   password  String                                 // Hashed password
   templates Template[]                               // A user can create many templates
-  posts     Post[]                                   // A user can author many posts
+  posts     Post[]  
+  binding Binding[]                                 // A user can author many posts
   createdAt DateTime   @default(now())               // Auto-generated timestamp
   updatedAt DateTime   @updatedAt                    // Auto-updated timestamp
 }
@@ -73,3 +74,14 @@ model Post {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
+
+// Allows each user/admin to have their own binding preferences
+model Binding {
+  id        String   @id @default(uuid())
+  mode      String
+  selected  Json
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  updatedAt DateTime @updatedAt
+}
+
