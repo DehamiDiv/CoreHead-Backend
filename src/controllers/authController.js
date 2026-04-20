@@ -27,21 +27,22 @@ const login = async (req, res) => {
             return res.status(400).json({ error: 'Email and password are required' });
         }
 
-        const { user, token } = await authService.loginUser(email, password);
-
+        // The login response now includes the 'role' field.
+        // This is crucial for the frontend to know if it should redirect to the /admin dashboard.
         res.status(200).json({
             message: 'Login successful',
             token,
-            user: { id: user.id, email: user.email }
+            user: { id: user.id, email: user.email, role: user.role }
         });
     } catch (error) {
+        // 401 Unauthorized for invalid credentials
         res.status(401).json({ error: error.message });
     }
 };
 
 const getCurrentUser = async (req, res) => {
     try {
-        // req.user contains the decoded JWT token payload (id, email) added by authMiddleware
+        // req.user contains the decoded JWT token payload (id, email, role) added by authMiddleware
         res.status(200).json({ user: req.user });
     } catch (error) {
         res.status(500).json({ error: 'Failed to fetch user details' });
