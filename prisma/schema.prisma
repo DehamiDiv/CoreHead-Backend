@@ -19,6 +19,12 @@ model User {
   password  String                                 // Hashed password
   templates Template[]                               // A user can create many templates
   posts     Post[]                                   // A user can author many posts
+  
+  // ROLE-BASED ACCESS CONTROL (RBAC)
+  // "admin" users have full access to the CMS builder and dashboard.
+  // "user" is the default role for regular readers or authors.
+  role      String     @default("user")              
+  
   createdAt DateTime   @default(now())               // Auto-generated timestamp
   updatedAt DateTime   @updatedAt                    // Auto-updated timestamp
 }
