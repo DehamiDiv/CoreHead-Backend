@@ -27,6 +27,9 @@ const login = async (req, res) => {
             return res.status(400).json({ error: 'Email and password are required' });
         }
 
+        // Call the auth service to validate credentials and generate JWT
+        const { user, token } = await authService.loginUser(email, password);
+
         // The login response now includes the 'role' field.
         // This is crucial for the frontend to know if it should redirect to the /admin dashboard.
         res.status(200).json({
