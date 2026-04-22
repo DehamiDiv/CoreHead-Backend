@@ -1,4 +1,3 @@
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,74 +7,61 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ------------------------------------------------------
-// User Model
-// ------------------------------------------------------
-// Represents the "User" table in the PostgreSQL database.
-// Stores basic authentication details (email, password).
 model User {
-  id        Int        @id @default(autoincrement()) // Primary Key
-  email     String     @unique                       // Must be unique for login
-  password  String                                 // Hashed password
-  templates Template[]                               // A user can create many templates
-  posts     Post[]                                   // A user can author many posts
-  
-  // ROLE-BASED ACCESS CONTROL (RBAC)
-  // "admin" users have full access to the CMS builder and dashboard.
-  // "user" is the default role for regular readers or authors.
-  role      String     @default("user")              
-  
-  createdAt DateTime   @default(now())               // Auto-generated timestamp
-  updatedAt DateTime   @updatedAt                    // Auto-updated timestamp
+  id        Int        @id @default(autoincrement())
+  email     String     @unique
+  password  String
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  Binding   Binding[]
+  posts     Post[]
+  templates Template[]
 }
 
-// ------------------------------------------------------
-// Template Model (Visual Blog Builder Layouts)
-// ------------------------------------------------------
-// Stores the drag-and-drop layout schemas designed by Admins
 model Template {
-  id          Int      @id @default(autoincrement())
-  name        String                                // Name of the layout (e.g., Default Single Post)
-  type        String                                // e.g., "single_post" or "archive"
-  category    String?                               // Optional: For category-specific layouts
-  status      String   @default("draft")            // "draft" or "published"
-  layoutJson  Json                                  // Storing the layout as structured JSON
-  authorId    Int                                   // Admin user who created it
-  author      User     @relation(fields: [authorId], references: [id])
-  version     Int      @default(1)                  // Layout version tracking
-  history     TemplateHistory[]                     // Previous versions of this layout
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         Int               @id @default(autoincrement())
+  name       String
+  type       String
+  category   String?
+  status     String            @default("draft")
+  layoutJson Json
+  authorId   Int
+  version    Int               @default(1)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  author     User              @relation(fields: [authorId], references: [id])
+  history    TemplateHistory[]
 }
 
-// ------------------------------------------------------
-// TemplateHistory Model (Versioning)
-// ------------------------------------------------------
-// Stores previous versions of templates allowing for rollback
 model TemplateHistory {
-  id          Int      @id @default(autoincrement())
-  templateId  Int
-  template    Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  version     Int
-  layoutJson  Json
-  updatedBy   Int      // User ID who made the edit
-  createdAt   DateTime @default(now())
+  id         Int      @id @default(autoincrement())
+  templateId Int
+  version    Int
+  layoutJson Json
+  updatedBy  Int
+  createdAt  DateTime @default(now())
+  template   Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
 }
 
-// ------------------------------------------------------
-// Post Model (Dynamic Blog Data)
-// ------------------------------------------------------
-// Actual blog content to be injected into layouts
 model Post {
-  id          Int      @id @default(autoincrement())
-  title       String
-  slug        String   @unique
-  excerpt     String?
-  content     String
-  imageUrl    String?
-  status      String   @default("published")
-  authorId    Int
-  author      User     @relation(fields: [authorId], references: [id])
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        Int      @id @default(autoincrement())
+  title     String
+  slug      String   @unique
+  excerpt   String?
+  content   String
+  imageUrl  String?
+  status    String   @default("published")
+  authorId  Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  author    User     @relation(fields: [authorId], references: [id])
+}
+
+model Binding {
+  id        String   @id
+  mode      String
+  selected  Json
+  userId    Int
+  updatedAt DateTime
+  User      User     @relation(fields: [userId], references: [id])
 }
