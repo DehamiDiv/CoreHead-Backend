@@ -131,7 +131,7 @@ module.exports = {
     updateTemplate,
     deleteTemplate,
     saveTemplateHistory,
-    // My contribution
+    
     publishTemplate,
     assignTemplate,
     resolveActiveLayout
