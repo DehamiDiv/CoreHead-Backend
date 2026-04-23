@@ -38,3 +38,8 @@ const bindingRoutes = require("./routes/bindingRoutes");
 
 app.use("/api", bindingRoutes);
 
+
+// Register blog routes to handle layout and post endpoints under /api/blog
+const blogRoutes = require('./routes/blogRoutes');
+app.use('/api/blog', blogRoutes);
+
