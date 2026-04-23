@@ -5,13 +5,13 @@ const saveBinding = async (mode, selected) => {
     where: { id: "single-binding" }, // only one config
     update: {
       mode,
-      selected,
+      selected
     },
     create: {
       id: "single-binding",
       mode,
-      selected,
-    },
+      selected
+    }
   });
 };
 
