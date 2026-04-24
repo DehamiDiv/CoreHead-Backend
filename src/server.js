@@ -13,7 +13,8 @@ const PORT = process.env.PORT || 5000;
 
 // Middleware
 app.use(cors()); // Allow cross-origin requests (e.g., from Frontend)
-app.use(express.json()); // Parse incoming JSON data
+app.use(express.json({ limit: '50mb' })); // Parse incoming JSON data with increased limit for base64 images
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Basic Route (For Testing)
 app.get('/', (req, res) => {
