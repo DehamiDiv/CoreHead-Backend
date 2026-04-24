@@ -14,8 +14,7 @@ const prisma = new PrismaClient();
 const getPreviewPosts = async (limit = 6, offset = 0) => {
   return await prisma.post.findMany({
     where: {
-      isPublished: true,
-      publishedAt: { lte: new Date() },
+      status: "Published",
     },
     select: {
       id:         true,
@@ -24,11 +23,10 @@ const getPreviewPosts = async (limit = 6, offset = 0) => {
       excerpt:    true,
       coverImage: true,
       author:     true,
-      category:   true,
-      tags:       true,
-      publishedAt: true,
+      categories: true,
+      createdAt:  true,
     },
-    orderBy: { publishedAt: 'desc' },
+    orderBy: { createdAt: 'desc' },
     take:    limit,
     skip:    offset,
   });
@@ -41,8 +39,7 @@ const getPreviewPosts = async (limit = 6, offset = 0) => {
 const countPublishedPosts = async () => {
   return await prisma.post.count({
     where: {
-      isPublished: true,
-      publishedAt: { lte: new Date() },
+      status: "Published",
     },
   });
 };
@@ -56,7 +53,7 @@ const getPostBySlug = async (slug) => {
   return await prisma.post.findFirst({
     where: {
       slug,
-      isPublished: true,
+      status: "Published",
     },
     include: {
       author: {
