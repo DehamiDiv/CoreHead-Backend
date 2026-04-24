@@ -74,6 +74,8 @@ model Post {
   content     String
   imageUrl    String?
   status      String   @default("published")
+  categories  String[] @default([])
+  featured    Boolean  @default(false)
   authorId    Int
   author      User     @relation(fields: [authorId], references: [id])
   createdAt   DateTime @default(now())

@@ -6,6 +6,7 @@ const cors = require('cors');
 const authRoutes = require('./routes/authRoutes');
 const templateRoutes = require('./routes/templateRoutes');
 const previewRoutes = require('./routes/previewRoutes');
+const postRoutes = require('./routes/postRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -26,6 +27,7 @@ app.get('/', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/templates', templateRoutes);
 app.use('/api/preview', previewRoutes);
+app.use('/api/posts', postRoutes);
 
 // Start the server
 app.listen(PORT, () => {
