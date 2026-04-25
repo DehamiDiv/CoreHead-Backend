@@ -1,6 +1,23 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
+const formatPost = async (post) => {
+  let author = { name: 'Unknown', avatar: 'U' };
+  if (post.author_id) {
+    const authorData = await prisma.authors.findUnique({
+      where: { id: post.author_id },
+      select: { name: true, avatar: true, email: true }
+    });
+    if (authorData) {
+      author = {
+        name: authorData.name || authorData.email.split('@')[0],
+        avatar: authorData.avatar || (authorData.name ? authorData.name.charAt(0) : authorData.email.charAt(0))
+      };
+    }
+  }
+  return { ...post, author };
+};
+
 // Create a new post
 exports.createPost = async (req, res) => {
   try {
@@ -10,38 +27,29 @@ exports.createPost = async (req, res) => {
       excerpt,
       content,
       status,
-      categories,
-      featured,
+      category,
+      tags,
       authorId,
-      thumbnailUrl, // mapped to coverImage
-      metaTitle,
-      metaDescription,
-      keywords,
-      canonicalUrl,
-      structuredData
+      thumbnailUrl,
+      published_date
     } = req.body;
 
-    // Validate required fields
     if (!title || !slug || !content || !authorId) {
       return res.status(400).json({ error: 'Title, slug, content, and authorId are required.' });
     }
 
-    const post = await prisma.post.create({
+    const post = await prisma.posts.create({
       data: {
         title,
         slug,
         excerpt,
-        content,
-        coverImage: thumbnailUrl,
+        body: content,
+        featured_image: thumbnailUrl,
         status: status || 'Published',
-        categories: categories || [],
-        featured: featured || false,
-        metaTitle,
-        metaDescription,
-        keywords: keywords || [],
-        canonicalUrl,
-        structuredData,
-        authorId: parseInt(authorId, 10),
+        category: category || 'General',
+        tags: tags || [],
+        author_id: parseInt(authorId, 10),
+        published_date: published_date ? new Date(published_date) : new Date(),
       },
     });
 
@@ -58,33 +66,25 @@ exports.createPost = async (req, res) => {
 // Get all posts
 exports.getPosts = async (req, res) => {
   try {
-    const posts = await prisma.post.findMany({
-      include: {
-        author: {
-          select: {
-            id: true,
-            email: true,
-            name: true
-          }
-        }
-      },
+    const { category, limit, status } = req.query;
+    
+    const where = {};
+    if (category) where.category = category;
+    if (status)   where.status = status;
+
+    const posts = await prisma.posts.findMany({
+      where,
+      take: limit ? parseInt(limit, 10) : undefined,
       orderBy: {
-        createdAt: 'desc'
+        created_at: 'desc'
       }
     });
 
-    const formattedPosts = posts.map(post => ({
-      ...post,
-      author: {
-        name: post.author.name || post.author.email.split('@')[0],
-        avatar: post.author.name ? post.author.name.charAt(0) : post.author.email.charAt(0),
-      }
-    }));
-
+    const formattedPosts = await Promise.all(posts.map(post => formatPost(post)));
     res.status(200).json(formattedPosts);
   } catch (error) {
     console.error('Error fetching posts:', error);
-    res.status(500).json({ error: 'Failed to fetch posts.' });
+    res.status(500).json({ error: 'Failed to fetch posts.', message: error.message });
   }
 };
 
@@ -92,7 +92,7 @@ exports.getPosts = async (req, res) => {
 exports.getPostById = async (req, res) => {
   try {
     const { id } = req.params;
-    const post = await prisma.post.findUnique({
+    const post = await prisma.posts.findUnique({
       where: { id: parseInt(id, 10) }
     });
 
@@ -100,7 +100,8 @@ exports.getPostById = async (req, res) => {
       return res.status(404).json({ error: 'Post not found.' });
     }
 
-    res.status(200).json(post);
+    const formattedPost = await formatPost(post);
+    res.status(200).json(formattedPost);
   } catch (error) {
     console.error('Error fetching post:', error);
     res.status(500).json({ error: 'Failed to fetch post.' });
@@ -117,32 +118,25 @@ exports.updatePost = async (req, res) => {
       excerpt,
       content,
       status,
-      categories,
-      featured,
+      category,
+      tags,
       thumbnailUrl,
-      metaTitle,
-      metaDescription,
-      keywords,
-      canonicalUrl,
-      structuredData
+      published_date
     } = req.body;
 
-    const post = await prisma.post.update({
+    const post = await prisma.posts.update({
       where: { id: parseInt(id, 10) },
       data: {
         title,
         slug,
         excerpt,
-        content,
-        coverImage: thumbnailUrl,
+        body: content,
+        featured_image: thumbnailUrl,
         status,
-        categories,
-        featured,
-        metaTitle,
-        metaDescription,
-        keywords,
-        canonicalUrl,
-        structuredData
+        category,
+        tags,
+        published_date: published_date ? new Date(published_date) : undefined,
+        updated_at: new Date()
       },
     });
 
@@ -160,7 +154,7 @@ exports.updatePost = async (req, res) => {
 exports.deletePost = async (req, res) => {
   try {
     const { id } = req.params;
-    await prisma.post.delete({
+    await prisma.posts.delete({
       where: { id: parseInt(id, 10) }
     });
 
@@ -170,3 +164,4 @@ exports.deletePost = async (req, res) => {
     res.status(500).json({ error: 'Failed to delete post.' });
   }
 };
+
