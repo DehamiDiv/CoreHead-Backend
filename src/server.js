@@ -11,7 +11,9 @@ const templateRoutes = require('./routes/templateRoutes');
 const previewRoutes  = require('./routes/previewRoutes');
 const postRoutes     = require('./routes/postRoutes');
 const bindingRoutes  = require('./routes/bindingRoutes');
+const aiRoutes       = require('./routes/aiRoutes');
 const blogRoutes     = require('./routes/blogRoutes');
+const builderRoutes  = require('./routes/builderRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -103,7 +105,10 @@ app.get('/api/bindings', (req, res) => {
 app.use('/api/auth',      authRoutes);
 app.use('/api/templates', templateRoutes);
 app.use('/api/preview',   previewRoutes);
+app.get('/api/posts_diag', (req, res) => res.json({ msg: 'Diag from server.js' }));
 app.use('/api/posts',     postRoutes);
+app.use('/api/builder',   builderRoutes);
+app.use('/api/ai',        aiRoutes);
 app.use('/api',           bindingRoutes);
 app.use('/api/blog',      blogRoutes);
 
