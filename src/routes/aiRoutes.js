@@ -1,59 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const { PrismaClient } = require('@prisma/client');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+
 const prisma = new PrismaClient();
 const { Groq } = require('groq-sdk');
 const { z } = require('zod');
 const rateLimit = require('express-rate-limit');
 const authMiddleware = require('../middlewares/authMiddleware');
-
-// Ensure Groq key exists before instantiation
-let groq = null;
-if (process.env.GROQ_API_KEY) {
-  groq = new Groq({
-    apiKey: process.env.GROQ_API_KEY,
-  });
-} else {
-  console.warn('GROQ_API_KEY is missing. AI features will be disabled.');
-}
-
-// Zod Schema for strict JSON validation
-const CardSchema = z.object({
-  id: z.number().or(z.string()),
-  title: z.string(),
-  excerpt: z.string(),
-  author: z.string(),
-  date: z.string(),
-  image: z.string().url().optional().or(z.literal("")).default("https://picsum.photos/seed/default/800/600"),
-  category: z.string()
-});
-
-const LayoutSchema = z.object({
-  cards: z.array(CardSchema).min(1),
-  settings: z.object({
-    theme: z.string(),
-    features: z.any().optional()
-  })
-});
-
-// Fallback layout in case AI fails
-const FALLBACK_LAYOUT = {
-  cards: [
-    {
-      id: "fallback-1",
-      title: "Sample Blog Post",
-      excerpt: "The AI was unable to generate a layout, but here is a sample structure for you to build upon.",
-      author: "System",
-      date: new Date().toISOString().split('T')[0],
-      image: "https://picsum.photos/seed/fallback/800/600",
-      category: "General"
-    }
-  ],
-  settings: {
-    theme: "Modern Light",
-    features: { sidebar: true }
-  }
-};
 
 // Rate limiter for AI endpoints (10 requests per 15 minutes)
 const aiLimiter = rateLimit({
@@ -64,143 +18,210 @@ const aiLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// Get AI generation history (Protected)
-router.get('/history', authMiddleware, async (req, res) => {
-  try {
-    const limit = parseInt(req.query.limit) || 50;
-    
-    const layouts = await prisma.ai_layouts.findMany({
-      where: {
-        user_id: req.user.id // Filter history by authenticated user
-      },
-      take: limit,
-      orderBy: { created_at: 'desc' }
-    });
-
-    res.json({ success: true, layouts });
-  } catch (error) {
-    console.error('Error fetching AI history:', error);
-    res.status(500).json({ error: 'Failed to fetch AI history' });
-  }
-});
-
-// Generate and Save Layout
+// ─── POST /api/ai/generate-layout ─────────────────────────────
+// Takes a user prompt and returns an array of BuilderBlocks
 router.post('/generate-layout', authMiddleware, aiLimiter, async (req, res) => {
   try {
-    let { prompt, layoutType, designStyle, features } = req.body;
+    const { prompt } = req.body;
 
-    // Security: Input validation & sanitization
-    if (!prompt || typeof prompt !== 'string' || prompt.length > 500) {
-      return res.status(400).json({ error: 'Invalid prompt. Please provide a prompt under 500 characters.' });
-    }
-    
-    // Basic sanitization: strip HTML tags and trim
-    prompt = prompt.replace(/<[^>]*>?/gm, '').trim();
-
-    if (prompt.length === 0) {
-      return res.status(400).json({ error: 'Prompt cannot be empty or contain only HTML tags.' });
+    if (!prompt || typeof prompt !== 'string') {
+      return res.status(400).json({ error: 'Prompt is required.' });
     }
 
-    if (!groq) {
-      return res.status(503).json({ error: 'AI Service is currently unavailable (API Key missing).' });
-    }
+    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
-    const systemPrompt = `You are an expert CMS layout designer. Generate a JSON layout structure based on the user's prompt.
-The layout must conform exactly to this JSON schema:
+    let blocks;
+
+    if (GEMINI_API_KEY) {
+      // ── Real Gemini AI generation ────────────────────────────
+      const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+
+      const systemPrompt = `
+You are a CMS layout generator for a blog platform called CoreHead.
+Given a user's description, generate a JSON array of layout blocks.
+
+Each block MUST follow this exact schema:
 {
-  "cards": [
-    {
-      "id": "number or unique string",
-      "title": "Post title",
-      "excerpt": "Short excerpt",
-      "author": "Author name",
-      "date": "YYYY-MM-DD",
-      "image": "Valid URL (use https://picsum.photos/seed/any_random_string/800/600 for placeholders)",
-      "category": "Category name"
-    }
-  ],
-  "settings": {
-    "theme": "Theme name",
-    "features": { "sidebar": true }
-  }
+  "id": "<unique string>",
+  "type": "<one of: Heading | Paragraph | Image | Quote | Divider | Button | Collection List>",
+  "content": <string for most types, { "text": string, "url": string } for Button, { "limit": number, "category": string } for Collection List>,
+  "styles": { <optional CSS-in-JS style properties> }
 }
-Return ONLY valid JSON. No markdown formatting, no explanations.`;
 
-    const userPrompt = `Generate a layout for a ${layoutType || 'blog'} with a ${designStyle || 'modern'} style.
-Features requested: ${JSON.stringify(features || {})}.
-User Request: ${prompt}`;
+Rules:
+- Always start with a Heading block as the page title
+- Use Paragraph blocks for descriptive text
+- Use Collection List block to show blog posts (type="Blog Archive" pages)
+- Use Image block for hero/banner images with a relevant Unsplash URL
+- Use Divider blocks to separate sections
+- Use Button blocks for CTAs
+- Generate 4-8 blocks total
+- Make content relevant to the user's prompt
+- IMPORTANT: Add { "marginBottom": "30px" } to the "styles" of EVERY block so they don't overlap and have proper spacing.
+- For Image blocks, use: https://images.unsplash.com/photo-1499750310107-5fef28a66643?w=1200&q=80
+- Return ONLY valid JSON array, no markdown, no explanation
 
-    // timeout handling with AbortController
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 20000); // 20 seconds timeout
+User prompt: "${prompt}"
+`;
 
-    let chatCompletion;
+      const result = await model.generateContent(systemPrompt);
+      const text = result.response.text().trim();
+
+      // Strip markdown code fences if present
+      const cleaned = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
+      blocks = JSON.parse(cleaned);
+
+    } else {
+      // ── Smart rule-based fallback (no API key needed) ────────
+      blocks = generateRuleBasedLayout(prompt);
+    }
+
+    // Ensure each block has a unique id
+    blocks = blocks.map((block, i) => ({
+      ...block,
+      id: block.id || `ai-block-${Date.now()}-${i}`,
+    }));
+
+    // Save to DB for history
+    let saved;
     try {
-      chatCompletion = await groq.chat.completions.create({
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt }
-        ],
-        model: "llama-3.1-8b-instant",
-        temperature: 0.7,
-        response_format: { type: "json_object" }
-      }, { signal: controller.signal });
-    } catch (apiError) {
-      if (apiError.name === 'AbortError') {
-        return res.status(504).json({ error: 'AI request timed out. Please try again.' });
-      }
-      throw apiError; // Re-throw other errors to be caught by outer catch
-    } finally {
-      clearTimeout(timeoutId);
+      saved = await prisma.ai_layouts.create({
+        data: {
+          user_id: req.user.id, // Associate with current user
+          prompt,
+          layout_type: 'blog-archive',
+          design_style: 'modern',
+          features: {},
+          generated_layout: { blocks },
+        },
+      });
+    } catch (dbErr) {
+      // Non-critical — don't fail the request if DB save fails
+      console.warn('AI layout DB save failed:', dbErr.message);
     }
 
-    if (!chatCompletion || !chatCompletion.choices) {
-      throw new Error("No response or invalid structure from AI service");
-    }
-
-    const aiResponse = chatCompletion.choices[0]?.message?.content;
-    
-    if (!aiResponse) {
-      throw new Error("Empty response from AI service");
-    }
-
-    let generated_layout;
-    try {
-      // Parse and strictly validate with Zod
-      const parsedData = JSON.parse(aiResponse);
-      generated_layout = LayoutSchema.parse(parsedData);
-    } catch (parseError) {
-      console.error('AI JSON Parse/Validation Error:', parseError);
-      // Fallback to a safe layout if AI fails
-      generated_layout = FALLBACK_LAYOUT;
-    }
-
-    // Save to database with user association
-    const saved = await prisma.ai_layouts.create({
-      data: {
-        user_id: req.user.id, // Associate with current user
-        prompt: prompt,
-        layout_type: layoutType || 'single-post',
-        design_style: designStyle || 'modern',
-        features: features || {},
-        generated_layout: generated_layout
-      }
-    });
-
-    res.json({ 
+    return res.json({ 
       success: true, 
-      layout: generated_layout,
-      id: saved.id,
-      isFallback: generated_layout === FALLBACK_LAYOUT
+      blocks,
+      id: saved ? saved.id : null,
+      isFallback: !GEMINI_API_KEY
     });
 
   } catch (error) {
-    console.error('Error in AI generation route:', error);
-    res.status(500).json({ 
-      error: 'Failed to generate layout', 
-      message: error.message 
+    console.error('AI generate-layout error:', error);
+    return res.status(500).json({
+      error: 'Failed to generate layout.',
+      message: error.message,
     });
   }
 });
+
+// ─── GET /api/ai/history ──────────────────────────────────────
+router.get('/history', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 20;
+    const layouts = await prisma.ai_layouts.findMany({
+      take: limit,
+      orderBy: { created_at: 'desc' },
+    });
+    return res.json({ success: true, layouts });
+  } catch (error) {
+    console.error('Error fetching AI history:', error);
+    return res.status(500).json({ error: 'Failed to fetch AI history' });
+  }
+});
+
+// ─── Rule-based layout generator (fallback when no API key) ───
+function generateRuleBasedLayout(prompt) {
+  const lower = prompt.toLowerCase();
+
+  const blocks = [];
+  let idx = 0;
+  const id = () => `ai-${Date.now()}-${idx++}`;
+
+  // ── Extract a topic from the prompt ──
+  const topic = prompt.length > 60 ? prompt.slice(0, 60) + '...' : prompt;
+
+  // 1. Always add a heading
+  blocks.push({
+    id: id(),
+    type: 'Heading',
+    content: toTitleCase(topic),
+    styles: { textAlign: 'center', fontSize: '36px', marginBottom: '30px' },
+  });
+
+  // 2. Hero image
+  const imageSeeds = {
+    food: 'photo-1504674900247-0877df9cc836',
+    bakery: 'photo-1608198093002-ad4e005484ec',
+    tech: 'photo-1518770660439-4636190af475',
+    travel: 'photo-1476514525535-07fb3b4ae5f1',
+    health: 'photo-1498837167922-ddd27525d352',
+    business: 'photo-1507003211169-0a1dd7228f2d',
+    fashion: 'photo-1558769132-cb1aea458c5e',
+    nature: 'photo-1441974231531-c6227db76b6e',
+  };
+  let imgKey = Object.keys(imageSeeds).find(k => lower.includes(k)) || 'business';
+  blocks.push({
+    id: id(),
+    type: 'Image',
+    content: `https://images.unsplash.com/${imageSeeds[imgKey]}?w=1200&q=80`,
+    styles: { borderRadius: '12px', marginBottom: '30px' },
+  });
+
+  // 3. Intro paragraph
+  blocks.push({
+    id: id(),
+    type: 'Paragraph',
+    content: `Welcome to our ${topic} section. Explore the latest articles, insights, and updates carefully curated for you.`,
+    styles: { textAlign: 'center', color: '#64748b', marginBottom: '30px' },
+  });
+
+  // 4. Divider
+  blocks.push({ id: id(), type: 'Divider', content: '', styles: { marginBottom: '30px' } });
+
+  // 5. Sub-heading for posts section
+  blocks.push({
+    id: id(),
+    type: 'Heading',
+    content: 'Latest Posts',
+    styles: { fontSize: '24px', marginBottom: '30px' },
+  });
+
+  // 6. Collection List (always useful for a blog)
+  blocks.push({
+    id: id(),
+    type: 'Collection List',
+    content: { limit: 6, category: '' },
+    styles: { marginBottom: '30px' },
+  });
+
+  // 7. CTA button
+  if (lower.includes('contact') || lower.includes('learn') || lower.includes('get started') || lower.includes('subscribe')) {
+    blocks.push({
+      id: id(),
+      type: 'Button',
+      content: { text: 'Get Started', url: '#' },
+      styles: {},
+    });
+  }
+
+  // 8. Quote if motivational/lifestyle
+  if (lower.includes('inspir') || lower.includes('motivat') || lower.includes('lifestyle') || lower.includes('tip')) {
+    blocks.push({
+      id: id(),
+      type: 'Quote',
+      content: `"The secret of getting ahead is getting started." — Mark Twain`,
+      styles: {},
+    });
+  }
+
+  return blocks;
+}
+
+function toTitleCase(str) {
+  return str.replace(/\w\S*/g, txt => txt.charAt(0).toUpperCase() + txt.slice(1).toLowerCase());
+}
 
 module.exports = router;

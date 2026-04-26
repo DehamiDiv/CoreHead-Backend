@@ -73,49 +73,40 @@ model posts {
 }
 
 model User {
-  id        Int        @id @default(autoincrement()) // Primary Key
-  email     String     @unique                       // Must be unique for login
-  password  String                                 // Hashed password
-  templates Template[]                               // A user can create many templates
-  posts     Post[]                                   // A user can author many posts
-  
-  // ROLE-BASED ACCESS CONTROL (RBAC)
-  // "admin" users have full access to the CMS builder and dashboard.
-  // "user" is the default role for regular readers or authors.
+  id        Int        @id @default(autoincrement())
+  email     String     @unique
+  password  String
+  templates Template[]
+  posts     Post[]
   role      String     @default("user")              
-  
-  createdAt DateTime   @default(now())               // Auto-generated timestamp
-  updatedAt DateTime   @updatedAt
-  @@map("users")                    // Auto-updated timestamp
+  createdAt DateTime?  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt DateTime?  @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  @@map("users")
 }
 
 model Template {
   id          Int      @id @default(autoincrement())
-  name        String                                // Name of the layout (e.g., Default Single Post)
-  type        String                                // e.g., "single_post" or "archive"
-  category    String?                               // Optional: For category-specific layouts
-  status      String   @default("draft")            // "draft" or "published"
-  layoutJson  Json                                  // Storing the layout as structured JSON
-  authorId    Int                                   // Admin user who created it
+  name        String
+  type        String
+  category    String?
+  status      String   @default("draft")
+  layoutJson  Json
+  authorId    Int
   author      User     @relation(fields: [authorId], references: [id])
-  version     Int      @default(1)                  // Layout version tracking
-  history     TemplateHistory[]                     // Previous versions of this layout
+  version     Int      @default(1)
+  history     TemplateHistory[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   @@map("templates")
 }
 
-// ------------------------------------------------------
-// TemplateHistory Model (Versioning)
-// ------------------------------------------------------
-// Stores previous versions of templates allowing for rollback
 model TemplateHistory {
   id          Int      @id @default(autoincrement())
   templateId  Int
   template    Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
   version     Int
   layoutJson  Json
-  updatedBy   Int      // User ID who made the edit
+  updatedBy   Int
   createdAt   DateTime @default(now())
 }
 
