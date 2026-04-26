@@ -1,7 +1,7 @@
 const prisma = require('../models/prismaClient');
 
 const createUser = async (email, password) => {
-    return await prisma.user.create({
+    return await prisma.users.create({
         data: {
             email,
             password
@@ -10,7 +10,7 @@ const createUser = async (email, password) => {
 };
 
 const findUserByEmail = async (email) => {
-    return await prisma.user.findUnique({
+    return await prisma.users.findUnique({
         where: { email }
     });
 };
