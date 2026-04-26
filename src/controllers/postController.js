@@ -1,21 +1,20 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
-const formatPost = async (post) => {
+// Helper to format post with author details safely
+const formatPostData = (post) => {
   let author = { name: 'Unknown', avatar: 'U' };
-  if (post.author_id) {
-    const authorData = await prisma.authors.findUnique({
-      where: { id: post.author_id },
-      select: { name: true, avatar: true, email: true }
-    });
-    if (authorData) {
-      author = {
-        name: authorData.name || authorData.email.split('@')[0],
-        avatar: authorData.avatar || (authorData.name ? authorData.name.charAt(0) : authorData.email.charAt(0))
-      };
-    }
+  
+  if (post.authors) {
+    author = {
+      name: post.authors.name || post.authors.email.split('@')[0],
+      avatar: post.authors.avatar || (post.authors.name ? post.authors.name.charAt(0) : post.authors.email.charAt(0))
+    };
   }
-  return { ...post, author };
+  
+  // Remove the internal 'authors' object from Prisma and replace with formatted 'author'
+  const { authors, ...postWithoutAuthors } = post;
+  return { ...postWithoutAuthors, author };
 };
 
 // Create a new post
@@ -69,18 +68,25 @@ exports.getPosts = async (req, res) => {
     const { category, limit, status } = req.query;
     
     const where = {};
+    // Security Note: Using Prisma's object-based 'where' clause is safe from SQL injection 
+    // as it uses parameterized queries under the hood.
     if (category) where.category = category;
     if (status)   where.status = status;
 
     const posts = await prisma.posts.findMany({
       where,
+      include: {
+        authors: {
+          select: { name: true, avatar: true, email: true }
+        }
+      },
       take: limit ? parseInt(limit, 10) : undefined,
       orderBy: {
         created_at: 'desc'
       }
     });
 
-    const formattedPosts = await Promise.all(posts.map(post => formatPost(post)));
+    const formattedPosts = posts.map(post => formatPostData(post));
     res.status(200).json(formattedPosts);
   } catch (error) {
     console.error('Error fetching posts:', error);
@@ -93,14 +99,19 @@ exports.getPostById = async (req, res) => {
   try {
     const { id } = req.params;
     const post = await prisma.posts.findUnique({
-      where: { id: parseInt(id, 10) }
+      where: { id: parseInt(id, 10) },
+      include: {
+        authors: {
+          select: { name: true, avatar: true, email: true }
+        }
+      }
     });
 
     if (!post) {
       return res.status(404).json({ error: 'Post not found.' });
     }
 
-    const formattedPost = await formatPost(post);
+    const formattedPost = formatPostData(post);
     res.status(200).json(formattedPost);
   } catch (error) {
     console.error('Error fetching post:', error);

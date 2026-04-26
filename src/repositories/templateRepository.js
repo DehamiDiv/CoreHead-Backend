@@ -1,7 +1,9 @@
 const prisma = require('../models/prismaClient');
 
 const createTemplate = async (data) => {
-    return await prisma.template.create({ data });
+    const userCheck = await prisma.user.findUnique({ where: { id: data.authorId } });
+    console.log("Does user exist?", !!userCheck);
+    return await prisma.template.create({ data: { authorId: data.authorId, name: data.name, type: data.type, layoutJson: data.layoutJson } });
 };
 
 const getAllTemplates = async () => {
@@ -131,7 +133,7 @@ module.exports = {
     updateTemplate,
     deleteTemplate,
     saveTemplateHistory,
-    // My contribution
+
     publishTemplate,
     assignTemplate,
     resolveActiveLayout

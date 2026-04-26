@@ -34,8 +34,8 @@ const getTemplateById = async (req, res) => {
 const updateTemplate = async (req, res) => {
     try {
         const updatedTemplate = await templateService.updateTemplate(
-            req.params.id, 
-            req.body, 
+            req.params.id,
+            req.body,
             req.user.id // Pass user ID for version history
         );
         res.status(200).json(updatedTemplate);

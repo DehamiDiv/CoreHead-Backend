@@ -4,10 +4,23 @@ const { PrismaClient } = require('@prisma/client');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const prisma = new PrismaClient();
+const { Groq } = require('groq-sdk');
+const { z } = require('zod');
+const rateLimit = require('express-rate-limit');
+const authMiddleware = require('../middlewares/authMiddleware');
+
+// Rate limiter for AI endpoints (10 requests per 15 minutes)
+const aiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { error: 'Too many requests from this IP, please try again after 15 minutes.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // ─── POST /api/ai/generate-layout ─────────────────────────────
 // Takes a user prompt and returns an array of BuilderBlocks
-router.post('/generate-layout', async (req, res) => {
+router.post('/generate-layout', authMiddleware, aiLimiter, async (req, res) => {
   try {
     const { prompt } = req.body;
 
@@ -71,9 +84,11 @@ User prompt: "${prompt}"
     }));
 
     // Save to DB for history
+    let saved;
     try {
-      await prisma.ai_layouts.create({
+      saved = await prisma.ai_layouts.create({
         data: {
+          user_id: req.user.id, // Associate with current user
           prompt,
           layout_type: 'blog-archive',
           design_style: 'modern',
@@ -86,13 +101,21 @@ User prompt: "${prompt}"
       console.warn('AI layout DB save failed:', dbErr.message);
     }
 
-    return res.json({ success: true, blocks });
+    return res.json({ 
+      success: true, 
+      blocks,
+      id: saved ? saved.id : null,
+      isFallback: !GEMINI_API_KEY
+    });
 
   } catch (error) {
     console.error('AI generate-layout error:', error);
     return res.status(500).json({
       error: 'Failed to generate layout.',
       message: error.message,
+    });
+  }
+});
     });
   }
 });

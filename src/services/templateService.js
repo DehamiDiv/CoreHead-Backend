@@ -2,6 +2,7 @@ const templateRepo = require('../repositories/templateRepository');
 const { validateLayoutJson } = require('../utils/layoutValidator');
 
 const createTemplate = async (authorId, templateData) => {
+    console.log(authorId, templateData);
     const { name, type, layoutJson, category, status } = templateData;
 
     // 1. Basic validation (Ensure required fields)
