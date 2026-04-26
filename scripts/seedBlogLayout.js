@@ -1,4 +1,4 @@
-// scripts/seedBlogLayout.js
+np// scripts/seedBlogLayout.js
 // Run once to insert the blog-loop layout into the DB:
 //   node scripts/seedBlogLayout.js
 
