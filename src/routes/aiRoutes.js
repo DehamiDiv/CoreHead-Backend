@@ -116,9 +116,6 @@ User prompt: "${prompt}"
     });
   }
 });
-    });
-  }
-});
 
 // ─── GET /api/ai/history ──────────────────────────────────────
 router.get('/history', async (req, res) => {
