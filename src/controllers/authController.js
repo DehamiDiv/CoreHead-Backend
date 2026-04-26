@@ -3,13 +3,13 @@ const authService = require('../services/authService');
 const register = async (req, res) => {
     try {
         const { email, password } = req.body;
-        
+
         if (!email || !password) {
             return res.status(400).json({ error: 'Email and password are required' });
         }
 
         const newUser = await authService.registerUser(email, password);
-        
+
         res.status(201).json({
             message: 'User registered successfully',
             user: { id: newUser.id, email: newUser.email }
@@ -27,7 +27,6 @@ const login = async (req, res) => {
             return res.status(400).json({ error: 'Email and password are required' });
         }
 
-        // Call the auth service to validate credentials and generate JWT
         const { user, token } = await authService.loginUser(email, password);
 
         // The login response now includes the 'role' field.
