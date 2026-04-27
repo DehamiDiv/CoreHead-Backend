@@ -59,3 +59,40 @@ exports.getUsers = async (req, res) => {
     res.status(500).json({ success: false, message: 'Server error fetching users' });
   }
 };
+
+exports.updateUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { email, role, password } = req.body;
+
+    const dataToUpdate = { email, role };
+    if (password) {
+      const salt = await bcrypt.genSalt(10);
+      dataToUpdate.password = await bcrypt.hash(password, salt);
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id: parseInt(id) },
+      data: dataToUpdate,
+      select: { id: true, email: true, role: true }
+    });
+
+    return res.status(200).json({ success: true, message: 'User updated successfully', user: updatedUser });
+  } catch (error) {
+    console.error('Update user error:', error);
+    res.status(500).json({ success: false, message: 'Server error updating user' });
+  }
+};
+
+exports.deleteUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.user.delete({
+      where: { id: parseInt(id) }
+    });
+    return res.status(200).json({ success: true, message: 'User deleted successfully' });
+  } catch (error) {
+    console.error('Delete user error:', error);
+    res.status(500).json({ success: false, message: 'Server error deleting user' });
+  }
+};
