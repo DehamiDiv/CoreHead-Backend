@@ -16,6 +16,7 @@ const blogRoutes     = require('./routes/blogRoutes');
 const builderRoutes  = require('./routes/builderRoutes');
 const userRoutes     = require('./routes/userRoutes');
 const pageRoutes     = require('./routes/pageRoutes');
+const categoryRoutes = require('./routes/categoryRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -115,6 +116,7 @@ app.use('/api',           bindingRoutes);
 app.use('/api/blog',      blogRoutes);
 app.use('/api/users',     userRoutes);
 app.use('/api/pages',     pageRoutes);
+app.use('/api/categories',categoryRoutes);
 
 // ── Start Server ──
 app.listen(PORT, () => {
