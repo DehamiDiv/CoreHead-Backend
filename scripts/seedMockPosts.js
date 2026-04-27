@@ -15,7 +15,7 @@ async function main() {
   });
 
   // Create some mock published posts
-  await prisma.posts.createMany({
+  await prisma.post.createMany({
     data: [
       {
         title: 'Exploring the new Frontend',

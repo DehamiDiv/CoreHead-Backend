@@ -9,6 +9,7 @@ const data = JSON.stringify({
   status: "Published",
   featured: false,
   content: "This is the content of the test post.",
+
   thumbnailUrl: ""
 });
 
