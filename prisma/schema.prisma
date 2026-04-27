@@ -12,6 +12,7 @@ model User {
   email     String     @unique
   name      String?
   password  String
+  role      String     @default("user")
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
   Binding   Binding[]
@@ -45,21 +46,28 @@ model TemplateHistory {
 }
 
 model Post {
-  id          Int      @id @default(autoincrement())
-  title       String
-  slug        String   @unique
-  excerpt     String?
-  content     String
-  coverImage  String?
-  category    String?
-  tags        String[]
-  isPublished Boolean  @default(false)
-  publishedAt DateTime?
-  status      String   @default("published")
-  authorId    Int
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  author      User     @relation(fields: [authorId], references: [id])
+  id              Int       @id @default(autoincrement())
+  title           String
+  slug            String    @unique
+  excerpt         String?
+  content         String
+  coverImage      String?
+  category        String?
+  categories      String?
+  tags            String[]
+  featured        Boolean   @default(false)
+  isPublished     Boolean   @default(false)
+  publishedAt     DateTime?
+  status          String    @default("published")
+  metaTitle       String?
+  metaDescription String?
+  canonicalUrl    String?
+  keywords        String?
+  structuredData  String?
+  authorId        Int
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  author          User      @relation(fields: [authorId], references: [id])
 }
 
 model Binding {
