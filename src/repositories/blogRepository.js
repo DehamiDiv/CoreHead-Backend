@@ -106,10 +106,33 @@ const upsertLayout = async (slug, name, layout) => {
   });
 };
 
+/**
+ * Create a new blog post.
+ * @param {Object} data
+ * @returns {Promise<Object>}
+ */
+const createPost = async (data) => {
+  return await prisma.post.create({
+    data: {
+      title:       data.title,
+      slug:        data.slug,
+      excerpt:     data.excerpt,
+      content:     data.content,
+      coverImage:  data.thumbnailUrl, // Mapping thumbnailUrl from frontend to coverImage in DB
+      category:    Array.isArray(data.categories) ? data.categories[0] : data.categories, // Map first category or string
+      status:      data.status.toLowerCase(),
+      isPublished: data.status === 'Published',
+      publishedAt: data.status === 'Published' ? new Date() : null,
+      authorId:    parseInt(data.authorId) || 1,
+    }
+  });
+};
+
 module.exports = {
   getPreviewPosts,
   countPublishedPosts,
   getPostBySlug,
   getPublicLayout,
   upsertLayout,
+  createPost,
 };
