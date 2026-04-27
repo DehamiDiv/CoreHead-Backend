@@ -35,32 +35,44 @@ router.post('/generate-layout', authMiddleware, aiLimiter, async (req, res) => {
     if (GEMINI_API_KEY) {
       // ── Real Gemini AI generation ────────────────────────────
       const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
       const systemPrompt = `
 You are a CMS layout generator for a blog platform called CoreHead.
 Given a user's description, generate a JSON array of layout blocks.
 
+Available Block Types:
+- Heading: For titles and section headers.
+- Paragraph: For descriptive text.
+- Image: For visual content. Use a relevant Unsplash URL.
+- Quote: For testimonials or highlights.
+- Divider: To separate sections.
+- Button: For call-to-actions. Content: { "text": string, "url": string }.
+- Collection List: To show blog posts. Content: { "limit": number, "category": string }.
+- Featured Carousel: A large hero slider for posts. Content: { "limit": number }.
+- Video: Embed a YouTube video. Content: string (URL).
+- Newsletter: A subscription form. Content: { "title": string, "buttonText": string }.
+- Social Links: Icons for social media. Content: Array of strings.
+- Spacer: Transparent vertical spacing. Content: string (e.g. "50px").
+- Code Block: For technical code snippets. Content: { "code": string, "language": string }.
+- Container: A wrapper for other blocks.
+- Columns: A multi-column layout. Content: number (e.g., 2 or 3).
+
 Each block MUST follow this exact schema:
 {
   "id": "<unique string>",
-  "type": "<one of: Heading | Paragraph | Image | Quote | Divider | Button | Collection List>",
-  "content": <string for most types, { "text": string, "url": string } for Button, { "limit": number, "category": string } for Collection List>,
-  "styles": { <optional CSS-in-JS style properties> }
+  "type": "<one of the types above>",
+  "content": <content based on type>,
+  "styles": { <optional CSS-in-JS style properties like textAlign, color, fontSize, padding, margin, backgroundColor, borderRadius> }
 }
 
 Rules:
-- Always start with a Heading block as the page title
-- Use Paragraph blocks for descriptive text
-- Use Collection List block to show blog posts (type="Blog Archive" pages)
-- Use Image block for hero/banner images with a relevant Unsplash URL
-- Use Divider blocks to separate sections
-- Use Button blocks for CTAs
-- Generate 4-8 blocks total
-- Make content relevant to the user's prompt
-- IMPORTANT: Add { "marginBottom": "30px" } to the "styles" of EVERY block so they don't overlap and have proper spacing.
-- For Image blocks, use: https://images.unsplash.com/photo-1499750310107-5fef28a66643?w=1200&q=80
-- Return ONLY valid JSON array, no markdown, no explanation
+- Always start with a Heading block as the page title.
+- Use a mix of blocks to create a professional, modern layout.
+- For Blog Archive pages, always include a Collection List.
+- IMPORTANT: Add { "marginBottom": "30px" } to the "styles" of EVERY block.
+- For Image blocks, use relevant high-quality Unsplash URLs or this default: https://images.unsplash.com/photo-1499750310107-5fef28a66643?w=1200&q=80
+- Return ONLY a valid JSON array. No markdown code fences, no extra text.
 
 User prompt: "${prompt}"
 `;
@@ -68,9 +80,20 @@ User prompt: "${prompt}"
       const result = await model.generateContent(systemPrompt);
       const text = result.response.text().trim();
 
-      // Strip markdown code fences if present
-      const cleaned = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
-      blocks = JSON.parse(cleaned);
+      try {
+        // Attempt to extract JSON array using regex if the raw text isn't clean
+        const jsonMatch = text.match(/\[[\s\S]*\]/);
+        const jsonString = jsonMatch ? jsonMatch[0] : text;
+        
+        // Strip any remaining markdown or garbage
+        const cleaned = jsonString.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
+        
+        blocks = JSON.parse(cleaned);
+      } catch (parseErr) {
+        console.error('Gemini JSON Parse Error:', parseErr, 'Raw Text:', text);
+        // Fallback to rule-based if JSON is corrupted
+        blocks = generateRuleBasedLayout(prompt);
+      }
 
     } else {
       // ── Smart rule-based fallback (no API key needed) ────────

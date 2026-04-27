@@ -37,8 +37,8 @@ app.get('/api/preview/posts', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 3;
 
-    // ✅ Uses Prisma with correct model name 'posts'
-    const posts = await prisma.posts.findMany({
+    // ✅ Uses Prisma with correct model name 'post'
+    const posts = await prisma.post.findMany({
       take: limit,
       where: { status: 'published' },
       orderBy: { published_date: 'desc' },

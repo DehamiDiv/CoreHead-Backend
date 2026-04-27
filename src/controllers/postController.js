@@ -37,7 +37,7 @@ exports.createPost = async (req, res) => {
       return res.status(400).json({ error: 'Title, slug, content, and authorId are required.' });
     }
 
-    const post = await prisma.posts.create({
+    const post = await prisma.post.create({
       data: {
         title,
         slug,
@@ -73,7 +73,7 @@ exports.getPosts = async (req, res) => {
     if (category) where.category = category;
     if (status)   where.status = status;
 
-    const posts = await prisma.posts.findMany({
+    const posts = await prisma.post.findMany({
       where,
       include: {
         authors: {
@@ -98,7 +98,7 @@ exports.getPosts = async (req, res) => {
 exports.getPostById = async (req, res) => {
   try {
     const { id } = req.params;
-    const post = await prisma.posts.findUnique({
+    const post = await prisma.post.findUnique({
       where: { id: parseInt(id, 10) },
       include: {
         authors: {
@@ -135,7 +135,7 @@ exports.updatePost = async (req, res) => {
       published_date
     } = req.body;
 
-    const post = await prisma.posts.update({
+    const post = await prisma.post.update({
       where: { id: parseInt(id, 10) },
       data: {
         title,
@@ -165,7 +165,7 @@ exports.updatePost = async (req, res) => {
 exports.deletePost = async (req, res) => {
   try {
     const { id } = req.params;
-    await prisma.posts.delete({
+    await prisma.post.delete({
       where: { id: parseInt(id, 10) }
     });
 
