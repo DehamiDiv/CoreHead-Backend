@@ -5,16 +5,16 @@ const prisma = new PrismaClient();
 const formatPostData = (post) => {
   let author = { name: 'Unknown', avatar: 'U' };
   
-  if (post.authors) {
+  if (post.author) {
     author = {
-      name: post.authors.name || post.authors.email.split('@')[0],
-      avatar: post.authors.avatar || (post.authors.name ? post.authors.name.charAt(0) : post.authors.email.charAt(0))
+      name: post.author.email.split('@')[0],
+      avatar: post.author.email.charAt(0).toUpperCase()
     };
   }
   
-  // Remove the internal 'authors' object from Prisma and replace with formatted 'author'
-  const { authors, ...postWithoutAuthors } = post;
-  return { ...postWithoutAuthors, author };
+  // Remove the internal 'author' object from Prisma and replace with formatted 'author'
+  const { author: prismaAuthor, ...postWithoutAuthor } = post;
+  return { ...postWithoutAuthor, author };
 };
 
 // Create a new post
@@ -30,24 +30,28 @@ exports.createPost = async (req, res) => {
       tags,
       authorId,
       thumbnailUrl,
-      published_date
+      published_date,
+      categories // Added categories from frontend
     } = req.body;
 
     if (!title || !slug || !content || !authorId) {
       return res.status(400).json({ error: 'Title, slug, content, and authorId are required.' });
     }
 
-    const post = await prisma.posts.create({
+    // Handle category: take the first one from categories array if category is not provided
+    const finalCategory = category || (categories && categories.length > 0 ? categories[0] : 'General');
+
+    const post = await prisma.post.create({
       data: {
         title,
         slug,
         excerpt,
-        body: content,
-        featured_image: thumbnailUrl,
+        content,
+        imageUrl: thumbnailUrl,
         status: status || 'Published',
-        category: category || 'General',
+        category: finalCategory,
         tags: tags || [],
-        author_id: parseInt(authorId, 10),
+        authorId: parseInt(authorId, 10),
         published_date: published_date ? new Date(published_date) : new Date(),
       },
     });
@@ -58,7 +62,7 @@ exports.createPost = async (req, res) => {
     if (error.code === 'P2002') {
       return res.status(400).json({ error: 'A post with this URL slug already exists.' });
     }
-    res.status(500).json({ error: 'Failed to create post.' });
+    res.status(500).json({ error: 'Failed to create post.', details: error.message || String(error) });
   }
 };
 
@@ -73,16 +77,16 @@ exports.getPosts = async (req, res) => {
     if (category) where.category = category;
     if (status)   where.status = status;
 
-    const posts = await prisma.posts.findMany({
+    const posts = await prisma.post.findMany({
       where,
       include: {
-        authors: {
-          select: { name: true, avatar: true, email: true }
+        author: {
+          select: { email: true }
         }
       },
       take: limit ? parseInt(limit, 10) : undefined,
       orderBy: {
-        created_at: 'desc'
+        createdAt: 'desc'
       }
     });
 
@@ -98,11 +102,11 @@ exports.getPosts = async (req, res) => {
 exports.getPostById = async (req, res) => {
   try {
     const { id } = req.params;
-    const post = await prisma.posts.findUnique({
+    const post = await prisma.post.findUnique({
       where: { id: parseInt(id, 10) },
       include: {
-        authors: {
-          select: { name: true, avatar: true, email: true }
+        author: {
+          select: { email: true }
         }
       }
     });
@@ -132,22 +136,24 @@ exports.updatePost = async (req, res) => {
       category,
       tags,
       thumbnailUrl,
-      published_date
+      published_date,
+      categories
     } = req.body;
 
-    const post = await prisma.posts.update({
+    const finalCategory = category || (categories && categories.length > 0 ? categories[0] : undefined);
+
+    const post = await prisma.post.update({
       where: { id: parseInt(id, 10) },
       data: {
         title,
         slug,
         excerpt,
-        body: content,
-        featured_image: thumbnailUrl,
+        content,
+        imageUrl: thumbnailUrl,
         status,
-        category,
+        category: finalCategory,
         tags,
         published_date: published_date ? new Date(published_date) : undefined,
-        updated_at: new Date()
       },
     });
 
@@ -165,7 +171,7 @@ exports.updatePost = async (req, res) => {
 exports.deletePost = async (req, res) => {
   try {
     const { id } = req.params;
-    await prisma.posts.delete({
+    await prisma.post.delete({
       where: { id: parseInt(id, 10) }
     });
 

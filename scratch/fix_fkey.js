@@ -5,7 +5,7 @@ async function main() {
   console.log('Checking for invalid author references in posts...');
   
   // Find all posts
-  const posts = await prisma.posts.findMany({
+  const posts = await prisma.post.findMany({
     select: { id: true, author_id: true }
   });
   
@@ -21,7 +21,7 @@ async function main() {
   
   if (invalidPosts.length > 0) {
     console.log('Resetting invalid author_id to NULL...');
-    const result = await prisma.posts.updateMany({
+    const result = await prisma.post.updateMany({
       where: {
         id: { in: invalidPosts.map(p => p.id) }
       },
