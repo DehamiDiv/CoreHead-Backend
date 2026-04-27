@@ -14,6 +14,7 @@ const bindingRoutes  = require('./routes/bindingRoutes');
 const aiRoutes       = require('./routes/aiRoutes');
 const blogRoutes     = require('./routes/blogRoutes');
 const builderRoutes  = require('./routes/builderRoutes');
+const userRoutes     = require('./routes/userRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -111,6 +112,7 @@ app.use('/api/builder',   builderRoutes);
 app.use('/api/ai',        aiRoutes);
 app.use('/api',           bindingRoutes);
 app.use('/api/blog',      blogRoutes);
+app.use('/api/users',     userRoutes);
 
 // ── Start Server ──
 app.listen(PORT, () => {
