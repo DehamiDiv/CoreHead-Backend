@@ -5,9 +5,11 @@ const formatPostData = (post) => {
   let author = { name: 'Unknown', avatar: 'U' };
 
   if (post.author) {
-    const name = post.author.email?.split('@')[0] || 'Unknown';
+    const name = post.author.name || post.author.email?.split('@')[0] || 'Unknown';
     author = {
+      id: post.author.id,
       name,
+      email: post.author.email,
       avatar: name.charAt(0).toUpperCase()
     };
   }
@@ -25,9 +27,15 @@ exports.createPost = async (req, res) => {
       excerpt,
       content,
       status,
-      categories,   // frontend sends categories[] array
+      featured,
+      categories,
       thumbnailUrl,
       authorId,
+      keywords,
+      metaTitle,
+      metaDescription,
+      canonicalUrl,
+      structuredData,
     } = req.body;
 
     if (!title || !slug || !content) {
@@ -37,27 +45,50 @@ exports.createPost = async (req, res) => {
     // Use logged-in user's ID, or fall back to provided authorId, or default to 1
     const resolvedAuthorId = req.user?.id || parseInt(authorId, 10) || 1;
 
-    // Pick first category from array (Post model has no array support)
-    const category = Array.isArray(categories) && categories.length > 0
-      ? categories[0]
-      : (typeof categories === 'string' ? categories : 'General');
+    // Serialize arrays to comma-separated strings (schema stores as String?)
+    const categoriesStr = Array.isArray(categories)
+      ? categories.join(',')
+      : (typeof categories === 'string' ? categories : '');
+
+    const keywordsStr = Array.isArray(keywords)
+      ? keywords.join(',')
+      : (typeof keywords === 'string' ? keywords : '');
+
+    // Parse structuredData safely
+    let parsedStructuredData = null;
+    if (structuredData) {
+      try {
+        parsedStructuredData = typeof structuredData === 'string'
+          ? JSON.parse(structuredData)
+          : structuredData;
+      } catch (_) {
+        parsedStructuredData = null;
+      }
+    }
 
     const post = await prisma.post.create({
       data: {
         title,
         slug,
-        excerpt:  excerpt || null,
+        excerpt:         excerpt         || null,
         content,
-        imageUrl: thumbnailUrl || null,
-        status:   status || 'published',
-        authorId: resolvedAuthorId,
+        coverImage:      thumbnailUrl    || null,   // ✅ schema field is coverImage
+        status:          status          || 'published',
+        featured:        featured        ?? false,
+        categories:      categoriesStr   || null,
+        keywords:        keywordsStr     || null,
+        metaTitle:       metaTitle       || null,
+        metaDescription: metaDescription || null,
+        canonicalUrl:    canonicalUrl    || null,
+        structuredData:  parsedStructuredData,
+        authorId:        resolvedAuthorId,
       },
       include: {
         author: { select: { id: true, email: true } }
       }
     });
 
-    res.status(201).json({ message: 'Post created successfully', post: formatPostData(post) });
+    res.status(201).json({ message: 'Post created successfully', ...post });
   } catch (error) {
     console.error('Error creating post:', error);
     if (error.code === 'P2002') {
@@ -114,6 +145,28 @@ exports.getPostById = async (req, res) => {
   }
 };
 
+// Get single post by slug
+exports.getPostBySlug = async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const post = await prisma.post.findUnique({
+      where: { slug },
+      include: {
+        author: { select: { id: true, email: true, name: true } }
+      }
+    });
+
+    if (!post) {
+      return res.status(404).json({ error: 'Post not found.' });
+    }
+
+    res.status(200).json(formatPostData(post));
+  } catch (error) {
+    console.error('Error fetching post by slug:', error);
+    res.status(500).json({ error: 'Failed to fetch post.' });
+  }
+};
+
 // Update a post
 exports.updatePost = async (req, res) => {
   try {
@@ -135,7 +188,7 @@ exports.updatePost = async (req, res) => {
         ...(excerpt      !== undefined && { excerpt }),
         ...(content      !== undefined && { content }),
         ...(status       !== undefined && { status }),
-        ...(thumbnailUrl !== undefined && { imageUrl: thumbnailUrl }),
+        ...(thumbnailUrl !== undefined && { coverImage: thumbnailUrl }),
       },
       include: {
         author: { select: { id: true, email: true } }
