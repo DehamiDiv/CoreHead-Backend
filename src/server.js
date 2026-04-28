@@ -37,47 +37,34 @@ app.get('/api/preview/posts', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 3;
 
-    // ✅ Uses Prisma with correct model name 'posts'
-    const posts = await prisma.posts.findMany({
+    // ✅ Uses the 'Post' model (maps to Post table via User relation)
+    const posts = await prisma.post.findMany({
       take: limit,
       where: { status: 'published' },
-      orderBy: { published_date: 'desc' },
+      orderBy: { createdAt: 'desc' },
       select: {
-        id:             true,
-        title:          true,
-        slug:           true,
-        excerpt:        true,
-        featured_image: true,
-        category:       true,
-        tags:           true,
-        published_date: true,
-        author_id:      true,
+        id:        true,
+        title:     true,
+        slug:      true,
+        excerpt:   true,
+        imageUrl:  true,
+        status:    true,
+        createdAt: true,
+        author: {
+          select: { id: true, email: true }
+        }
       }
     });
 
-    // Get author names separately since posts has author_id not a relation
-    const postsWithAuthor = await Promise.all(
-      posts.map(async (post) => {
-        let author_name   = null;
-        let author_avatar = null;
-
-        if (post.author_id) {
-          const author = await prisma.authors.findUnique({
-            where: { id: post.author_id },
-            select: { name: true, avatar: true }
-          });
-          author_name   = author?.name   || null;
-          author_avatar = author?.avatar || null;
-        }
-
-        return {
-          ...post,
-          imageUrl:      post.featured_image, // friend's code expects imageUrl
-          author_name,
-          author_avatar,
-        };
-      })
-    );
+    const postsWithAuthor = posts.map((post) => ({
+      ...post,
+      featured_image: post.imageUrl,
+      published_date: post.createdAt,
+      author_name:    post.author?.email || null,
+      author_avatar:  null,
+      category:       null,
+      tags:           [],
+    }));
 
     return res.status(200).json({
       success: true,
