@@ -43,12 +43,12 @@ app.get('/api/preview/posts', async (req, res) => {
       where: { status: 'published' },
       orderBy: { createdAt: 'desc' },
       select: {
-        id:        true,
-        title:     true,
-        slug:      true,
-        excerpt:   true,
-        imageUrl:  true,
-        status:    true,
+        id:         true,
+        title:      true,
+        slug:       true,
+        excerpt:    true,
+        coverImage: true,
+        status:     true,
         createdAt: true,
         author: {
           select: { id: true, email: true }
@@ -58,7 +58,7 @@ app.get('/api/preview/posts', async (req, res) => {
 
     const postsWithAuthor = posts.map((post) => ({
       ...post,
-      featured_image: post.imageUrl,
+      featured_image: post.coverImage,
       published_date: post.createdAt,
       author_name:    post.author?.email || null,
       author_avatar:  null,
