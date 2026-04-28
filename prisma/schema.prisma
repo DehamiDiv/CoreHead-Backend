@@ -51,17 +51,21 @@ model categories {
 }
 
 model User {
-  id         Int        @id @default(autoincrement())
-  email      String     @unique
-  password   String
-  role       String     @default("user")
+  id          Int        @id @default(autoincrement())
+  email       String     @unique
+  password    String
+  role        String     @default("user")
+  name        String?    @db.VarChar(255)
+  designation String?    @db.VarChar(255)
+  bio         String?
+  avatar      String?    @db.Text
 
-  templates  Template[]
-  posts      Post[]
-  pages      Page[]
+  templates   Template[]
+  posts       Post[]
+  pages       Page[]
 
-  createdAt  DateTime   @default(now()) @map("created_at") @db.Timestamp(6)
-  updatedAt  DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt   DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
 
   @@map("users")
 }

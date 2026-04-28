@@ -50,6 +50,10 @@ exports.getUsers = async (req, res) => {
         id: true,
         email: true,
         role: true,
+        name: true,
+        designation: true,
+        bio: true,
+        avatar: true,
         createdAt: true,
       }
     });
@@ -63,9 +67,9 @@ exports.getUsers = async (req, res) => {
 exports.updateUser = async (req, res) => {
   try {
     const { id } = req.params;
-    const { email, role, password } = req.body;
+    const { email, role, password, name, designation, bio, avatar } = req.body;
 
-    const dataToUpdate = { email, role };
+    const dataToUpdate = { email, role, name, designation, bio, avatar };
     if (password) {
       const salt = await bcrypt.genSalt(10);
       dataToUpdate.password = await bcrypt.hash(password, salt);
@@ -74,13 +78,13 @@ exports.updateUser = async (req, res) => {
     const updatedUser = await prisma.user.update({
       where: { id: parseInt(id) },
       data: dataToUpdate,
-      select: { id: true, email: true, role: true }
+      select: { id: true, email: true, role: true, name: true, designation: true, bio: true, avatar: true }
     });
 
     return res.status(200).json({ success: true, message: 'User updated successfully', user: updatedUser });
   } catch (error) {
     console.error('Update user error:', error);
-    res.status(500).json({ success: false, message: 'Server error updating user' });
+    res.status(500).json({ success: false, message: 'Server error updating user: ' + error.message });
   }
 };
 
