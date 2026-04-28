@@ -56,11 +56,12 @@ model User {
   id        Int        @id @default(autoincrement())
   email     String     @unique
   password  String
+  name      String?
   templates Template[]
   posts     Post[]
-  role      String     @default("user")              
-  createdAt DateTime?  @default(now()) @map("created_at") @db.Timestamp(6)
-  updatedAt DateTime?  @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  role      String     @default("user")
+  createdAt DateTime?  @default(now()) @db.Timestamp(6)
+  updatedAt DateTime?  @default(now()) @updatedAt @db.Timestamp(6)
   @@map("users")
 }
 
@@ -91,16 +92,24 @@ model TemplateHistory {
 }
 
 model Post {
-  id          Int      @id @default(autoincrement())
-  title       String
-  slug        String   @unique
-  excerpt     String?
-  content     String
-  imageUrl    String?
-  status      String   @default("published")
-  authorId    Int
-  author      User     @relation(fields: [authorId], references: [id])
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              Int      @id @default(autoincrement())
+  title           String
+  slug            String   @unique
+  excerpt         String?
+  content         String
+  coverImage      String?
+  status          String   @default("published")
+  isPublished     Boolean  @default(false)
+  featured        Boolean  @default(false)
+  categories      String?
+  keywords        String?
+  metaTitle       String?
+  metaDescription String?
+  canonicalUrl    String?
+  structuredData  Json?
+  authorId        Int
+  author          User     @relation(fields: [authorId], references: [id])
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
  
