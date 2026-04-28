@@ -13,4 +13,7 @@ router.post('/login', authController.login);
 // GET /api/auth/me - Get currently logged in user
 router.get('/me', authMiddleware, authController.getCurrentUser);
 
+// GET /api/auth/users - Get all users
+router.get('/users', authController.getAllUsers);
+
 module.exports = router;
