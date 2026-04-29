@@ -7,8 +7,8 @@ const formatPostData = (post) => {
   
   if (post.author) {
     author = {
-      name: post.author.email.split('@')[0],
-      avatar: post.author.email.charAt(0).toUpperCase()
+      name: post.author.name || post.author.email.split('@')[0],
+      avatar: post.author.avatar || post.author.email.charAt(0).toUpperCase()
     };
   }
   
@@ -81,7 +81,7 @@ exports.getPosts = async (req, res) => {
       where,
       include: {
         author: {
-          select: { email: true }
+          select: { email: true, name: true, avatar: true }
         }
       },
       take: limit ? parseInt(limit, 10) : undefined,
@@ -106,7 +106,7 @@ exports.getPostById = async (req, res) => {
       where: { id: parseInt(id, 10) },
       include: {
         author: {
-          select: { email: true }
+          select: { email: true, name: true, avatar: true }
         }
       }
     });
