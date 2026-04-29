@@ -31,7 +31,8 @@ exports.createPost = async (req, res) => {
       authorId,
       thumbnailUrl,
       published_date,
-      categories // Added categories from frontend
+      categories,
+      featured 
     } = req.body;
 
     if (!title || !slug || !content || !authorId) {
@@ -51,6 +52,7 @@ exports.createPost = async (req, res) => {
         status: status || 'Published',
         category: finalCategory,
         tags: tags || [],
+        featured: featured === true || featured === 'true',
         authorId: parseInt(authorId, 10),
         published_date: published_date ? new Date(published_date) : new Date(),
       },
@@ -76,6 +78,9 @@ exports.getPosts = async (req, res) => {
     // as it uses parameterized queries under the hood.
     if (category) where.category = category;
     if (status)   where.status = status;
+    if (req.query.featured !== undefined) {
+      where.featured = req.query.featured === 'true';
+    }
 
     const posts = await prisma.post.findMany({
       where,
@@ -137,7 +142,8 @@ exports.updatePost = async (req, res) => {
       tags,
       thumbnailUrl,
       published_date,
-      categories
+      categories,
+      featured
     } = req.body;
 
     const finalCategory = category || (categories && categories.length > 0 ? categories[0] : undefined);
@@ -153,6 +159,7 @@ exports.updatePost = async (req, res) => {
         status,
         category: finalCategory,
         tags,
+        featured: featured !== undefined ? (featured === true || featured === 'true') : undefined,
         published_date: published_date ? new Date(published_date) : undefined,
       },
     });

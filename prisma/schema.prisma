@@ -112,6 +112,7 @@ model Post {
   status         String?   @default("draft") @db.VarChar(20)
   category       String?   @db.VarChar(100)
   tags           String[]
+  featured       Boolean   @default(false)
 
   authorId       Int?      @map("author_id")
   author         User?     @relation(fields: [authorId], references: [id])
