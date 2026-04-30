@@ -13,4 +13,13 @@ router.post('/login', authController.login);
 // GET /api/auth/me - Get currently logged in user
 router.get('/me', authMiddleware, authController.getCurrentUser);
 
+// POST /api/auth/forgot-password
+router.post('/forgot-password', authController.forgotPassword);
+
+// POST /api/auth/reset-password
+router.post('/reset-password', authController.resetPassword);
+
+// POST /api/auth/refresh-token
+router.post('/refresh-token', authController.refreshToken);
+
 module.exports = router;

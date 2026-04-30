@@ -29,15 +29,12 @@ router.post('/generate-layout', authMiddleware, aiLimiter, async (req, res) => {
     }
 
     const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+    const GROQ_API_KEY   = process.env.GROQ_API_KEY;
 
-    let blocks;
+    let blocks = null;
+    let provider = 'fallback';
 
-    if (GEMINI_API_KEY) {
-      // ── Real Gemini AI generation ────────────────────────────
-      const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-
-      const systemPrompt = `
+    const systemPrompt = `
 You are a CMS layout generator for a blog platform called CoreHead.
 Given a user's description, generate a JSON array of layout blocks.
 
@@ -54,9 +51,6 @@ Available Block Types:
 - Newsletter: A subscription form. Content: { "title": string, "buttonText": string }.
 - Social Links: Icons for social media. Content: Array of strings.
 - Spacer: Transparent vertical spacing. Content: string (e.g. "50px").
-- Code Block: For technical code snippets. Content: { "code": string, "language": string }.
-- Container: A wrapper for other blocks.
-- Columns: A multi-column layout. Content: number (e.g., 2 or 3).
 
 Each block MUST follow this exact schema:
 {
@@ -69,35 +63,60 @@ Each block MUST follow this exact schema:
 Rules:
 - Always start with a Heading block as the page title.
 - Use a mix of blocks to create a professional, modern layout.
-- For Blog Archive pages, always include a Collection List.
+- Always include a Collection List block.
 - IMPORTANT: Add { "marginBottom": "30px" } to the "styles" of EVERY block.
-- For Image blocks, use relevant high-quality Unsplash URLs or this default: https://images.unsplash.com/photo-1499750310107-5fef28a66643?w=1200&q=80
+- For Image blocks, use relevant high-quality Unsplash URLs.
 - Return ONLY a valid JSON array. No markdown code fences, no extra text.
 
 User prompt: "${prompt}"
 `;
 
-      const result = await model.generateContent(systemPrompt);
-      const text = result.response.text().trim();
+    const parseBlocks = (text) => {
+      const jsonMatch = text.match(/\[[\s\S]*\]/);
+      const jsonString = jsonMatch ? jsonMatch[0] : text;
+      const cleaned = jsonString.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
+      return JSON.parse(cleaned);
+    };
 
+    // ── 1. Try Groq (llama3-70b) — free and fast ─────────────────
+    if (GROQ_API_KEY && !blocks) {
       try {
-        // Attempt to extract JSON array using regex if the raw text isn't clean
-        const jsonMatch = text.match(/\[[\s\S]*\]/);
-        const jsonString = jsonMatch ? jsonMatch[0] : text;
-        
-        // Strip any remaining markdown or garbage
-        const cleaned = jsonString.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
-        
-        blocks = JSON.parse(cleaned);
-      } catch (parseErr) {
-        console.error('Gemini JSON Parse Error:', parseErr, 'Raw Text:', text);
-        // Fallback to rule-based if JSON is corrupted
-        blocks = generateRuleBasedLayout(prompt);
+        const groq = new Groq({ apiKey: GROQ_API_KEY });
+        const completion = await groq.chat.completions.create({
+          model: 'llama-3.3-70b-versatile',
+          messages: [{ role: 'user', content: systemPrompt }],
+          temperature: 0.7,
+          max_tokens: 4000,
+        });
+        const text = completion.choices[0]?.message?.content?.trim() || '';
+        blocks = parseBlocks(text);
+        provider = 'groq';
+        console.log('✅ AI generated via Groq');
+      } catch (groqErr) {
+        console.warn('⚠️ Groq failed, trying Gemini:', groqErr.message);
       }
+    }
 
-    } else {
-      // ── Smart rule-based fallback (no API key needed) ────────
+    // ── 2. Try Gemini as fallback ─────────────────────────────────
+    if (GEMINI_API_KEY && !blocks) {
+      try {
+        const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+        const result = await model.generateContent(systemPrompt);
+        const text = result.response.text().trim();
+        blocks = parseBlocks(text);
+        provider = 'gemini';
+        console.log('✅ AI generated via Gemini');
+      } catch (geminiErr) {
+        console.warn('⚠️ Gemini failed, using rule-based:', geminiErr.message);
+      }
+    }
+
+    // ── 3. Smart rule-based fallback — always works ───────────────
+    if (!blocks) {
       blocks = generateRuleBasedLayout(prompt);
+      provider = 'rule-based';
+      console.log('✅ Layout generated via rule-based fallback');
     }
 
     // Ensure each block has a unique id
@@ -106,12 +125,12 @@ User prompt: "${prompt}"
       id: block.id || `ai-block-${Date.now()}-${i}`,
     }));
 
-    // Save to DB for history
+    // Save to DB for history (non-critical)
     let saved;
     try {
       saved = await prisma.ai_layouts.create({
         data: {
-          user_id: req.user.id, // Associate with current user
+          user_id: req.user.id,
           prompt,
           layout_type: 'blog-archive',
           design_style: 'modern',
@@ -120,7 +139,6 @@ User prompt: "${prompt}"
         },
       });
     } catch (dbErr) {
-      // Non-critical — don't fail the request if DB save fails
       console.warn('AI layout DB save failed:', dbErr.message);
     }
 
@@ -128,7 +146,7 @@ User prompt: "${prompt}"
       success: true, 
       blocks,
       id: saved ? saved.id : null,
-      isFallback: !GEMINI_API_KEY
+      provider,
     });
 
   } catch (error) {
