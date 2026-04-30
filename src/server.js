@@ -20,6 +20,7 @@ const pageRoutes     = require('./routes/pageRoutes');
 const categoryRoutes = require('./routes/categoryRoutes');
 const settingsRoutes = require('./routes/settingsRoutes');
 const mediaRoutes    = require('./routes/mediaRoutes');
+const commentRoutes  = require('./routes/commentRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -125,6 +126,7 @@ app.use('/api/pages',     pageRoutes);
 app.use('/api/categories',categoryRoutes);
 app.use('/api/settings',  settingsRoutes);
 app.use('/api/media',     mediaRoutes);
+app.use('/api/comments',  commentRoutes);
 
 // ── Start Server ──
 app.listen(PORT, () => {

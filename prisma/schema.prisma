@@ -63,6 +63,7 @@ model User {
   templates   Template[]
   posts       Post[]
   pages       Page[]
+  comments    Comment[]
 
   createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamp(6)
   updatedAt   DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
@@ -121,7 +122,30 @@ model Post {
   createdAt      DateTime? @default(now()) @map("created_at") @db.Timestamp(6)
   updatedAt      DateTime? @default(now()) @map("updated_at") @db.Timestamp(6)
 
+  comments       Comment[]
+
   @@map("posts")
+}
+
+model Comment {
+  id        Int      @id @default(autoincrement())
+  content   String   @db.Text
+  status    String   @default("approved") @db.VarChar(20)
+  
+  postId    Int      @map("post_id")
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  
+  userId    Int?     @map("user_id")
+  user      User?    @relation(fields: [userId], references: [id])
+
+  // Denormalized fields for performance or guest users
+  userName   String?  @map("user_name") @db.VarChar(255)
+  userAvatar String?  @map("user_avatar") @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  @@map("comments")
 }
 
 model Page {
