@@ -50,24 +50,36 @@ model categories {
   created_at  DateTime? @default(now()) @db.Timestamp(6)
 }
 
+model posts {
+  id             Int       @id @default(autoincrement())
+  title          String    @db.VarChar(255)
+  slug           String    @unique @db.VarChar(255)
+  excerpt        String?
+  body           String
+  featured_image String?   @db.VarChar(500)
+  category       String?   @db.VarChar(100)
+  tags           String[]
+  author_id      Int?
+  status         String?   @default("draft") @db.VarChar(20)
+  published_date DateTime? @db.Timestamp(6)
+  created_at     DateTime? @default(now()) @db.Timestamp(6)
+  updated_at     DateTime? @default(now()) @db.Timestamp(6)
+
+  @@index([author_id], map: "idx_posts_author")
+  @@index([category], map: "idx_posts_category")
+  @@index([published_date], map: "idx_posts_published_date")
+  @@index([status], map: "idx_posts_status")
+}
+
 model User {
-  id          Int        @id @default(autoincrement())
-  email       String     @unique
-  password    String
-  role        String     @default("user")
-  name        String?    @db.VarChar(255)
-  designation String?    @db.VarChar(255)
-  bio         String?
-  avatar      String?    @db.Text
-
-  templates   Template[]
-  posts       Post[]
-  pages       Page[]
-  comments    Comment[]
-
-  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamp(6)
-  updatedAt   DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
-
+  id        Int        @id @default(autoincrement())
+  email     String     @unique
+  password  String
+  templates Template[]
+  posts     Post[]
+  role      String     @default("user")              
+  createdAt DateTime?  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt DateTime?  @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
   @@map("users")
 }
 
@@ -104,85 +116,15 @@ model TemplateHistory {
 }
 
 model Post {
-  id             Int       @id @default(autoincrement())
-  title          String    @db.VarChar(255)
-  slug           String    @unique @db.VarChar(255)
-  excerpt        String?
-  content        String    @map("body")
-  imageUrl       String?   @map("featured_image") @db.VarChar(500)
-  status         String?   @default("draft") @db.VarChar(20)
-  category       String?   @db.VarChar(100)
-  tags           String[]
-  featured       Boolean   @default(false)
-
-  authorId       Int?      @map("author_id")
-  author         User?     @relation(fields: [authorId], references: [id])
-
-  published_date DateTime? @db.Timestamp(6)
-  createdAt      DateTime? @default(now()) @map("created_at") @db.Timestamp(6)
-  updatedAt      DateTime? @default(now()) @map("updated_at") @db.Timestamp(6)
-
-  comments       Comment[]
-
-  @@map("posts")
-}
-
-model Comment {
-  id        Int      @id @default(autoincrement())
-  content   String   @db.Text
-  status    String   @default("approved") @db.VarChar(20)
-  
-  postId    Int      @map("post_id")
-  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
-  
-  userId    Int?     @map("user_id")
-  user      User?    @relation(fields: [userId], references: [id])
-
-  // Denormalized fields for performance or guest users
-  userName   String?  @map("user_name") @db.VarChar(255)
-  userAvatar String?  @map("user_avatar") @db.Text
-
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
-  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
-
-  @@map("comments")
-}
-
-model Page {
   id          Int      @id @default(autoincrement())
-  name        String   @db.VarChar(255)
-  slug        String   @unique @db.VarChar(255)
-  htmlContent String   @map("html_content")
-  status      String   @default("Draft") @db.VarChar(50)
-  
-  authorId    Int?     @map("author_id")
-  author      User?    @relation(fields: [authorId], references: [id])
-  
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamp(6)
-  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
-
-  @@map("pages")
-}
-
-model Setting {
-  id        Int      @id @default(autoincrement())
-  key       String   @unique @db.VarChar(100)
-  value     Json
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
-  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
-
-  @@map("settings")
-}
-
-model Media {
-  id        Int      @id @default(autoincrement())
-  name      String
-  size      String
-  url       String
-  type      String?
-  isDeleted Boolean  @default(false) @map("is_deleted")
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
-  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
-
-  @@map("media")
+  title       String
+  slug        String   @unique
+  excerpt     String?
+  content     String
+  imageUrl    String?
+  status      String   @default("published")
+  authorId    Int
+  author      User     @relation(fields: [authorId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
