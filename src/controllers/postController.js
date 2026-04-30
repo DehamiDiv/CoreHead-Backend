@@ -3,31 +3,18 @@ const prisma = require('../models/prismaClient');
 // Helper to format post with author details safely
 const formatPostData = (post) => {
   let author = { name: 'Unknown', avatar: 'U' };
-<<<<<<< HEAD
-  
-  if (post.author) {
-    author = {
-      name: post.author.name || post.author.email.split('@')[0],
-      avatar: post.author.avatar || post.author.email.charAt(0).toUpperCase()
-    };
-  }
-  
-  // Remove the internal 'author' object from Prisma and replace with formatted 'author'
-  const { author: prismaAuthor, ...postWithoutAuthor } = post;
-=======
-
   if (post.author) {
     const name = post.author.name || post.author.email?.split('@')[0] || 'Unknown';
     author = {
       id: post.author.id,
       name,
       email: post.author.email,
-      avatar: name.charAt(0).toUpperCase()
+      avatar: post.author.avatar || name.charAt(0).toUpperCase()
     };
   }
 
-  const { author: rawAuthor, ...postWithoutAuthor } = post;
->>>>>>> auth-complete
+  const { author: prismaAuthor, ...postWithoutAuthor } = post;
+  return { ...postWithoutAuthor, author };
   return { ...postWithoutAuthor, author };
 };
 
@@ -43,81 +30,50 @@ exports.createPost = async (req, res) => {
       featured,
       categories,
       thumbnailUrl,
-<<<<<<< HEAD
-      published_date,
-      categories,
-      featured 
-=======
       authorId,
       keywords,
       metaTitle,
       metaDescription,
       canonicalUrl,
       structuredData,
->>>>>>> auth-complete
+      tags,
+      isPublished,
+      publishedAt,
+      category,
     } = req.body;
 
     if (!title || !slug || !content) {
       return res.status(400).json({ error: 'Title, slug, and content are required.' });
     }
 
-<<<<<<< HEAD
-    // Handle category: take the first one from categories array if category is not provided
-    const finalCategory = category || (categories && categories.length > 0 ? categories[0] : 'General');
-=======
     // Use logged-in user's ID, or fall back to provided authorId, or default to 1
     const resolvedAuthorId = req.user?.id || parseInt(authorId, 10) || 1;
 
-    // Serialize arrays to comma-separated strings (schema stores as String?)
-    const categoriesStr = Array.isArray(categories)
-      ? categories.join(',')
-      : (typeof categories === 'string' ? categories : '');
-
-    const keywordsStr = Array.isArray(keywords)
-      ? keywords.join(',')
-      : (typeof keywords === 'string' ? keywords : '');
-
-    // Parse structuredData safely
-    let parsedStructuredData = null;
-    if (structuredData) {
-      try {
-        parsedStructuredData = typeof structuredData === 'string'
-          ? JSON.parse(structuredData)
-          : structuredData;
-      } catch (_) {
-        parsedStructuredData = null;
-      }
+    // Parse structuredData safely if it's a string
+    let finalStructuredData = structuredData;
+    if (typeof structuredData === 'object') {
+      finalStructuredData = JSON.stringify(structuredData);
     }
->>>>>>> auth-complete
 
     const post = await prisma.post.create({
       data: {
         title,
         slug,
-<<<<<<< HEAD
-        excerpt,
-        content,
-        imageUrl: thumbnailUrl,
-        status: status || 'Published',
-        category: finalCategory,
-        tags: tags || [],
-        featured: featured === true || featured === 'true',
-        authorId: parseInt(authorId, 10),
-        published_date: published_date ? new Date(published_date) : new Date(),
-=======
         excerpt:         excerpt         || null,
         content,
-        coverImage:      thumbnailUrl    || null,   // ✅ schema field is coverImage
+        coverImage:      thumbnailUrl    || null,
         status:          status          || 'published',
         featured:        featured        ?? false,
-        categories:      categoriesStr   || null,
-        keywords:        keywordsStr     || null,
+        category:        category        || null,
+        tags:            tags            || [],
+        isPublished:     isPublished     ?? false,
+        publishedAt:     publishedAt ? new Date(publishedAt) : null,
+        authorId:        resolvedAuthorId,
+        keywords:        keywords        || null,
         metaTitle:       metaTitle       || null,
         metaDescription: metaDescription || null,
         canonicalUrl:    canonicalUrl    || null,
-        structuredData:  parsedStructuredData,
-        authorId:        resolvedAuthorId,
->>>>>>> auth-complete
+        structuredData:  finalStructuredData || null,
       },
       include: {
         author: { select: { id: true, email: true } }
@@ -130,54 +86,29 @@ exports.createPost = async (req, res) => {
     if (error.code === 'P2002') {
       return res.status(400).json({ error: 'A post with this URL slug already exists.' });
     }
-<<<<<<< HEAD
-    res.status(500).json({ error: 'Failed to create post.', details: error.message || String(error) });
-=======
     res.status(500).json({ error: 'Failed to create post.', message: error.message });
->>>>>>> auth-complete
   }
 };
 
 // Get all posts
 exports.getPosts = async (req, res) => {
   try {
-<<<<<<< HEAD
-    const { category, limit, status } = req.query;
-    
+    const { category, limit, status, featured } = req.query;
+
     const where = {};
-    // Security Note: Using Prisma's object-based 'where' clause is safe from SQL injection 
-    // as it uses parameterized queries under the hood.
-    if (category) where.category = category;
     if (status)   where.status = status;
-    if (req.query.featured !== undefined) {
-      where.featured = req.query.featured === 'true';
+    if (category) where.category = category;
+    if (featured !== undefined) {
+      where.featured = featured === 'true';
     }
 
     const posts = await prisma.post.findMany({
       where,
       include: {
-        author: {
-          select: { email: true, name: true, avatar: true }
-        }
-      },
-      take: limit ? parseInt(limit, 10) : undefined,
-      orderBy: {
-        createdAt: 'desc'
-      }
-=======
-    const { limit, status } = req.query;
-
-    const where = {};
-    if (status) where.status = status;
-
-    const posts = await prisma.post.findMany({
-      where,
-      include: {
-        author: { select: { id: true, email: true } }
+        author: { select: { id: true, email: true, name: true, avatar: true } }
       },
       take:     limit ? parseInt(limit, 10) : undefined,
       orderBy:  { createdAt: 'desc' }
->>>>>>> auth-complete
     });
 
     const formattedPosts = posts.map(post => formatPostData(post));
@@ -195,13 +126,7 @@ exports.getPostById = async (req, res) => {
     const post = await prisma.post.findUnique({
       where: { id: parseInt(id, 10) },
       include: {
-<<<<<<< HEAD
-        author: {
-          select: { email: true, name: true, avatar: true }
-        }
-=======
-        author: { select: { id: true, email: true } }
->>>>>>> auth-complete
+        author: { select: { id: true, email: true, name: true, avatar: true } }
       }
     });
 
@@ -249,28 +174,10 @@ exports.updatePost = async (req, res) => {
       content,
       status,
       thumbnailUrl,
-<<<<<<< HEAD
-      published_date,
-      categories,
-      featured
-    } = req.body;
-
-    const finalCategory = category || (categories && categories.length > 0 ? categories[0] : undefined);
-
-    const post = await prisma.post.update({
-      where: { id: parseInt(id, 10) },
-      data: {
-        title,
-        slug,
-        excerpt,
-        content,
-        imageUrl: thumbnailUrl,
-        status,
-        category: finalCategory,
-        tags,
-        featured: featured !== undefined ? (featured === true || featured === 'true') : undefined,
-        published_date: published_date ? new Date(published_date) : undefined,
-=======
+      tags,
+      featured,
+      isPublished,
+      publishedAt
     } = req.body;
 
     const post = await prisma.post.update({
@@ -282,7 +189,11 @@ exports.updatePost = async (req, res) => {
         ...(content      !== undefined && { content }),
         ...(status       !== undefined && { status }),
         ...(thumbnailUrl !== undefined && { coverImage: thumbnailUrl }),
->>>>>>> auth-complete
+        ...(category     !== undefined && { category }),
+        ...(tags         !== undefined && { tags }),
+        ...(featured     !== undefined && { featured: featured === true || featured === 'true' }),
+        ...(isPublished  !== undefined && { isPublished: isPublished === true || isPublished === 'true' }),
+        ...(publishedAt  !== undefined && { publishedAt: new Date(publishedAt) }),
       },
       include: {
         author: { select: { id: true, email: true } }

@@ -47,11 +47,7 @@ app.get('/api/preview/posts', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 3;
 
-<<<<<<< HEAD
-    // ✅ Uses Prisma with correct model name 'posts'
-=======
     // ✅ Uses the 'Post' model (maps to Post table via User relation)
->>>>>>> auth-complete
     const posts = await prisma.post.findMany({
       take: limit,
       where: { status: 'published' },

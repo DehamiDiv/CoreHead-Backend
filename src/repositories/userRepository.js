@@ -15,11 +15,12 @@ const findUserByEmail = async (email) => {
     });
 };
 
-<<<<<<< HEAD
 const findUserById = async (id) => {
     return await prisma.user.findUnique({
         where: { id: parseInt(id) }
-=======
+    });
+};
+
 const findAllUsers = async () => {
     return await prisma.user.findMany({
         select: {
@@ -28,16 +29,12 @@ const findAllUsers = async () => {
             name: true,
             role: true
         }
->>>>>>> auth-complete
     });
 };
 
 module.exports = {
     createUser,
     findUserByEmail,
-<<<<<<< HEAD
-    findUserById
-=======
+    findUserById,
     findAllUsers
->>>>>>> auth-complete
 };
