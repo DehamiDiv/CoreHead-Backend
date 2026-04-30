@@ -10,7 +10,7 @@ exports.getComments = async (req, res) => {
           select: { title: true, slug: true }
         },
         user: {
-          select: { name: true, avatar: true, email: true }
+          select: { name: true, email: true }
         }
       },
       orderBy: { createdAt: 'desc' }
@@ -26,7 +26,7 @@ exports.getComments = async (req, res) => {
       postSlug: c.post?.slug,
       userId: c.userId,
       userName: c.user?.name || c.userName || 'Anonymous',
-      userAvatar: c.user?.avatar || c.userAvatar,
+      userAvatar: c.userAvatar, // Keeping existing logic for non-user comments
       createdAt: c.createdAt
     }));
 

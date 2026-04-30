@@ -93,7 +93,7 @@ exports.createPost = async (req, res) => {
         publishedAt:     published_date ? new Date(published_date) : new Date(),
       },
       include: {
-        author: { select: { id: true, email: true, name: true, avatar: true } }
+        author: { select: { id: true, email: true, name: true } }
       }
     });
 
@@ -123,7 +123,7 @@ exports.getPosts = async (req, res) => {
       where,
       include: {
         author: {
-          select: { id: true, email: true, name: true, avatar: true }
+          select: { id: true, email: true, name: true }
         }
       },
       take: limit ? parseInt(limit, 10) : undefined,
@@ -147,7 +147,7 @@ exports.getPostById = async (req, res) => {
     const post = await prisma.post.findUnique({
       where: { id: parseInt(id, 10) },
       include: {
-        author: { select: { id: true, email: true, name: true, avatar: true } }
+        author: { select: { id: true, email: true, name: true } }
       }
     });
 
@@ -169,7 +169,7 @@ exports.getPostBySlug = async (req, res) => {
     const post = await prisma.post.findUnique({
       where: { slug },
       include: {
-        author: { select: { id: true, email: true, name: true, avatar: true } }
+        author: { select: { id: true, email: true, name: true } }
       }
     });
 
@@ -219,7 +219,7 @@ exports.updatePost = async (req, res) => {
         ...(published_date !== undefined && { publishedAt: new Date(published_date) }),
       },
       include: {
-        author: { select: { id: true, email: true, name: true, avatar: true } }
+        author: { select: { id: true, email: true, name: true } }
       }
     });
 
