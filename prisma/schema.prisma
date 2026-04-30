@@ -75,6 +75,10 @@ model User {
   id        Int        @id @default(autoincrement())
   email     String     @unique
   password  String
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  Binding   Binding[]
+  posts     Post[]
   templates Template[]
   posts     Post[]
   role      String     @default("user")              
@@ -121,10 +125,33 @@ model Post {
   slug        String   @unique
   excerpt     String?
   content     String
-  imageUrl    String?
+  coverImage  String?
+  category    String?
+  tags        String[]
+  isPublished Boolean  @default(false)
+  publishedAt DateTime?
   status      String   @default("published")
   authorId    Int
-  author      User     @relation(fields: [authorId], references: [id])
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  author      User     @relation(fields: [authorId], references: [id])
+}
+
+model Binding {
+  id        String   @id
+  mode      String
+  selected  Json
+  userId    Int?
+  updatedAt DateTime @updatedAt
+  user      User?    @relation(fields: [userId], references: [id])
+}
+
+model PageLayout {
+  id        Int      @id @default(autoincrement())
+  slug      String   @unique
+  name      String
+  layout    Json
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
