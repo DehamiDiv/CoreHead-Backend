@@ -25,22 +25,22 @@ const validateLayoutJson = (layoutJson) => {
         if (!Array.isArray(blockList)) return;
 
         for (const block of blockList) {
-            // Check blog loops
-            if (block.type === 'blog_loop') {
-                const query = block.props?.query;
+            // Check blog loops (Handles both internal 'blog_loop' and frontend 'Collection List' names)
+            if (block.type === 'blog_loop' || block.type === 'Collection List') {
+                // Support both frontend 'content' and standard 'props.query' structures
+                const query = block.props?.query || block.content;
+                
                 if (!query) {
-                    throw new Error("Validation Error: Blog Loop block is missing query properties");
+                    throw new Error(`Validation Error: ${block.type} block is missing query/content properties`);
                 }
                 
                 // Validate limit
                 if (query.limit !== undefined) {
                     const limit = parseInt(query.limit);
                     if (isNaN(limit) || limit < 1 || limit > 50) {
-                        throw new Error("Validation Error: Blog Loop limit must be a number between 1 and 50");
+                        throw new Error(`Validation Error: ${block.type} limit must be a number between 1 and 50`);
                     }
                 }
-                
-                // Other query validation can go here (e.g. check sort orders)
             }
 
             // If the block contains nested blocks (like a container), validate them too

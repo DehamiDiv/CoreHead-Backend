@@ -7,67 +7,134 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model ai_layouts {
+  id               Int       @id @default(autoincrement())
+  user_id          Int?
+  prompt           String
+  layout_type      String?   @db.VarChar(50)
+  design_style     String?   @db.VarChar(50)
+  features         Json?
+  generated_layout Json
+  created_at       DateTime? @default(now()) @db.Timestamp(6)
+}
+
+model authors {
+  id           Int       @id @default(autoincrement())
+  name         String    @db.VarChar(100)
+  email        String    @unique @db.VarChar(255)
+  bio          String?
+  avatar       String?   @db.VarChar(500)
+  social_links Json?
+  created_at   DateTime? @default(now()) @db.Timestamp(6)
+}
+
+model builder_layouts {
+  id           Int       @id @default(autoincrement())
+  name         String    @db.VarChar(255)
+  layout_data  Json
+  content_mode String?   @default("static") @db.VarChar(20)
+  grid_layout  String?   @default("grid") @db.VarChar(50)
+  user_id      Int?
+  created_at   DateTime? @default(now()) @db.Timestamp(6)
+  updated_at   DateTime? @default(now()) @db.Timestamp(6)
+
+  @@index([updated_at(sort: Desc)], map: "idx_builder_layouts_updated")
+  @@index([user_id], map: "idx_builder_layouts_user")
+}
+
+model categories {
+  id          Int       @id @default(autoincrement())
+  name        String    @unique @db.VarChar(100)
+  slug        String    @unique @db.VarChar(100)
+  description String?
+  created_at  DateTime? @default(now()) @db.Timestamp(6)
+}
+
+model posts {
+  id             Int       @id @default(autoincrement())
+  title          String    @db.VarChar(255)
+  slug           String    @unique @db.VarChar(255)
+  excerpt        String?
+  body           String
+  featured_image String?   @db.VarChar(500)
+  category       String?   @db.VarChar(100)
+  tags           String[]
+  author_id      Int?
+  status         String?   @default("draft") @db.VarChar(20)
+  published_date DateTime? @db.Timestamp(6)
+  created_at     DateTime? @default(now()) @db.Timestamp(6)
+  updated_at     DateTime? @default(now()) @db.Timestamp(6)
+
+  @@index([author_id], map: "idx_posts_author")
+  @@index([category], map: "idx_posts_category")
+  @@index([published_date], map: "idx_posts_published_date")
+  @@index([status], map: "idx_posts_status")
+}
+
 model User {
   id        Int        @id @default(autoincrement())
   email     String     @unique
-  name      String?
   password  String
-  role      String     @default("user")
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
   Binding   Binding[]
   posts     Post[]
   templates Template[]
+  posts     Post[]
+  role      String     @default("user")              
+  createdAt DateTime?  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt DateTime?  @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  @@map("users")
 }
 
 model Template {
-  id         Int               @id @default(autoincrement())
-  name       String
-  type       String
-  category   String?
-  status     String            @default("draft")
-  layoutJson Json
-  authorId   Int
-  version    Int               @default(1)
-  createdAt  DateTime          @default(now())
-  updatedAt  DateTime          @updatedAt
-  author     User              @relation(fields: [authorId], references: [id])
-  history    TemplateHistory[]
+  id          Int      @id @default(autoincrement())
+  name        String
+  type        String
+  category    String?
+  status      String   @default("draft")
+  layoutJson  Json
+
+  authorId    Int
+  author      User     @relation(fields: [authorId], references: [id])
+
+  version     Int      @default(1)
+  history     TemplateHistory[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("templates")
 }
 
 model TemplateHistory {
-  id         Int      @id @default(autoincrement())
-  templateId Int
-  version    Int
-  layoutJson Json
-  updatedBy  Int
-  createdAt  DateTime @default(now())
-  template   Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  id          Int      @id @default(autoincrement())
+  templateId  Int
+  template    Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  version     Int
+  layoutJson  Json
+  updatedBy   Int
+
+  createdAt   DateTime @default(now())
 }
 
 model Post {
-  id              Int       @id @default(autoincrement())
-  title           String
-  slug            String    @unique
-  excerpt         String?
-  content         String
-  coverImage      String?
-  category        String?
-  categories      String?
-  tags            String[]
-  featured        Boolean   @default(false)
-  isPublished     Boolean   @default(false)
-  publishedAt     DateTime?
-  status          String    @default("published")
-  metaTitle       String?
-  metaDescription String?
-  canonicalUrl    String?
-  keywords        String?
-  structuredData  String?
-  authorId        Int
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  author          User      @relation(fields: [authorId], references: [id])
+  id          Int      @id @default(autoincrement())
+  title       String
+  slug        String   @unique
+  excerpt     String?
+  content     String
+  coverImage  String?
+  category    String?
+  tags        String[]
+  isPublished Boolean  @default(false)
+  publishedAt DateTime?
+  status      String   @default("published")
+  authorId    Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  author      User     @relation(fields: [authorId], references: [id])
 }
 
 model Binding {
