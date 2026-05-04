@@ -15,7 +15,6 @@ const formatPostData = (post) => {
 
   const { author: prismaAuthor, ...postWithoutAuthor } = post;
   return { ...postWithoutAuthor, author };
-  return { ...postWithoutAuthor, author };
 };
 
 // Create a new post
@@ -174,6 +173,7 @@ exports.updatePost = async (req, res) => {
       content,
       status,
       thumbnailUrl,
+      category,
       tags,
       featured,
       isPublished,
