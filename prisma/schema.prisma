@@ -7,20 +7,118 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model ai_layouts {
+  id               Int       @id @default(autoincrement())
+  user_id          Int?
+  prompt           String
+  layout_type      String?   @db.VarChar(50)
+  design_style     String?   @db.VarChar(50)
+  features         Json?
+  generated_layout Json
+  created_at       DateTime? @default(now()) @db.Timestamp(6)
+}
+
+model authors {
+  id           Int       @id @default(autoincrement())
+  name         String    @db.VarChar(100)
+  email        String    @unique @db.VarChar(255)
+  bio          String?
+  avatar       String?   @db.VarChar(500)
+  social_links Json?
+  created_at   DateTime? @default(now()) @db.Timestamp(6)
+}
+
+model builder_layouts {
+  id           Int       @id @default(autoincrement())
+  name         String    @db.VarChar(255)
+  layout_data  Json
+  content_mode String?   @default("static") @db.VarChar(20)
+  grid_layout  String?   @default("grid") @db.VarChar(50)
+  user_id      Int?
+  created_at   DateTime? @default(now()) @db.Timestamp(6)
+  updated_at   DateTime? @default(now()) @db.Timestamp(6)
+
+  @@index([updated_at(sort: Desc)], map: "idx_builder_layouts_updated")
+  @@index([user_id], map: "idx_builder_layouts_user")
+}
+
+model categories {
+  id          Int       @id @default(autoincrement())
+  name        String    @unique @db.VarChar(100)
+  slug        String    @unique @db.VarChar(100)
+  description String?
+  created_at  DateTime? @default(now()) @db.Timestamp(6)
+}
+
 model User {
-  id        Int        @id(map: "User_pkey") @default(autoincrement())
-  email     String     @unique(map: "User_email_key")
-  password  String
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  role      String     @default("user")
-  name      String?
-  Binding   Binding[]
-  posts     Post[]
-  Template  Template[]
-  comments  Comment[]
+  id          Int        @id @default(autoincrement())
+  email       String     @unique
+  password    String
+  name        String?
+  nicename    String?
+  designation String?
+  bio         String?
+  avatar      String?
+  role        String     @default("user")
+  createdAt   DateTime?  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt   DateTime?  @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  Binding     Binding[]
+  posts       Post[]
+  templates   Template[]
+  comments    Comment[]
 
   @@map("users")
+}
+
+model Media {
+  id        Int       @id @default(autoincrement())
+  name      String
+  type      String
+  size      String
+  url       String
+  isDeleted Boolean?  @default(false) @map("is_deleted")
+  createdAt DateTime? @default(now()) @map("created_at")
+  updatedAt DateTime? @default(now()) @updatedAt @map("updated_at")
+
+  @@map("media")
+}
+
+model Setting {
+  id        Int       @id @default(autoincrement())
+  key       String    @unique
+  value     Json
+  createdAt DateTime? @default(now()) @map("created_at")
+  updatedAt DateTime? @default(now()) @updatedAt @map("updated_at")
+
+  @@map("settings")
+}
+
+model Page {
+  id          Int       @id @default(autoincrement())
+  name        String
+  slug        String    @unique
+  htmlContent String?   @map("html_content")
+  status      String    @default("Draft")
+  createdAt   DateTime? @default(now()) @map("created_at")
+  updatedAt   DateTime? @default(now()) @updatedAt @map("updated_at")
+
+  @@map("pages")
+}
+
+model Comment {
+  id         Int       @id @default(autoincrement())
+  content    String
+  status     String    @default("pending")
+  postId     Int?      @map("post_id")
+  post       Post?     @relation(fields: [postId], references: [id])
+  userId     Int?      @map("user_id")
+  user       User?     @relation(fields: [userId], references: [id])
+  userName   String?   @map("user_name")
+  userAvatar String?   @map("user_avatar")
+  createdAt  DateTime? @default(now()) @map("created_at")
+  updatedAt  DateTime? @default(now()) @updatedAt @map("updated_at")
+
+  @@map("comments")
 }
 
 model TemplateHistory {
@@ -38,27 +136,29 @@ model Post {
   title           String
   slug            String    @unique
   excerpt         String?
-  content         String
-  status          String    @default("published")
-  authorId        Int
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  categories      String?
-  featured        Boolean   @default(false)
-  canonicalUrl    String?
-  coverImage      String?
-  keywords        String?
-  metaDescription String?
-  metaTitle       String?
-  structuredData  String?
+  content         String    @map("body")
+  coverImage      String?   @map("featured_image")
   category        String?
-  isPublished     Boolean   @default(false)
-  publishedAt     DateTime?
+  categories      String?
   tags            String[]
+  keywords        String?
+  metaTitle       String?
+  metaDescription String?
+  canonicalUrl    String?
+  structuredData  String?
+  isPublished     Boolean   @default(false)
+  publishedAt     DateTime? @map("published_date")
+  status          String    @default("published")
+  featured        Boolean?  @default(false)
   showToc         Boolean   @default(false)
   allowComments   Boolean   @default(false)
-  author          User      @relation(fields: [authorId], references: [id])
+  authorId        Int?      @map("author_id")
+  createdAt       DateTime? @default(now()) @map("created_at")
+  updatedAt       DateTime? @default(now()) @updatedAt @map("updated_at")
+  author          User?     @relation(fields: [authorId], references: [id])
   comments        Comment[]
+
+  @@map("posts")
 }
 
 model Binding {
@@ -93,21 +193,4 @@ model Template {
   updatedAt  DateTime
   users      User              @relation(fields: [authorId], references: [id])
   history    TemplateHistory[]
-}
-
-model Comment {
-  id         Int      @id @default(autoincrement())
-  content    String
-  postId     Int
-  userId     Int?
-  userName   String?
-  userAvatar String?
-  status     String   @default("approved")
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  post       Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
-  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  @@map("comments")
 }
