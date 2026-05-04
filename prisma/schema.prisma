@@ -50,41 +50,75 @@ model categories {
   created_at  DateTime? @default(now()) @db.Timestamp(6)
 }
 
-model posts {
-  id             Int       @id @default(autoincrement())
-  title          String    @db.VarChar(255)
-  slug           String    @unique @db.VarChar(255)
-  excerpt        String?
-  body           String
-  featured_image String?   @db.VarChar(500)
-  category       String?   @db.VarChar(100)
-  tags           String[]
-  author_id      Int?
-  status         String?   @default("draft") @db.VarChar(20)
-  published_date DateTime? @db.Timestamp(6)
-  created_at     DateTime? @default(now()) @db.Timestamp(6)
-  updated_at     DateTime? @default(now()) @db.Timestamp(6)
+model User {
+  id          Int        @id @default(autoincrement())
+  email       String     @unique
+  password    String
+  name        String?
+  nicename    String?
+  designation String?
+  bio         String?
+  avatar      String?
+  role        String     @default("user")
+  createdAt   DateTime?  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt   DateTime?  @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  Binding     Binding[]
+  posts       Post[]
+  templates   Template[]
+  comments    Comment[]
 
-  @@index([author_id], map: "idx_posts_author")
-  @@index([category], map: "idx_posts_category")
-  @@index([published_date], map: "idx_posts_published_date")
-  @@index([status], map: "idx_posts_status")
+  @@map("users")
 }
 
-model User {
-  id        Int        @id @default(autoincrement())
-  email     String     @unique
-  password  String
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  Binding   Binding[]
-  posts     Post[]
-  templates Template[]
-  posts     Post[]
-  role      String     @default("user")              
-  createdAt DateTime?  @default(now()) @map("created_at") @db.Timestamp(6)
-  updatedAt DateTime?  @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
-  @@map("users")
+model Media {
+  id        Int       @id @default(autoincrement())
+  name      String
+  type      String
+  size      String
+  url       String
+  isDeleted Boolean?  @default(false) @map("is_deleted")
+  createdAt DateTime? @default(now()) @map("created_at")
+  updatedAt DateTime? @default(now()) @updatedAt @map("updated_at")
+
+  @@map("media")
+}
+
+model Setting {
+  id        Int       @id @default(autoincrement())
+  key       String    @unique
+  value     Json
+  createdAt DateTime? @default(now()) @map("created_at")
+  updatedAt DateTime? @default(now()) @updatedAt @map("updated_at")
+
+  @@map("settings")
+}
+
+model Page {
+  id          Int       @id @default(autoincrement())
+  name        String
+  slug        String    @unique
+  htmlContent String?   @map("html_content")
+  status      String    @default("Draft")
+  createdAt   DateTime? @default(now()) @map("created_at")
+  updatedAt   DateTime? @default(now()) @updatedAt @map("updated_at")
+
+  @@map("pages")
+}
+
+model Comment {
+  id         Int       @id @default(autoincrement())
+  content    String
+  status     String    @default("pending")
+  postId     Int?      @map("post_id")
+  post       Post?     @relation(fields: [postId], references: [id])
+  userId     Int?      @map("user_id")
+  user       User?     @relation(fields: [userId], references: [id])
+  userName   String?   @map("user_name")
+  userAvatar String?   @map("user_avatar")
+  createdAt  DateTime? @default(now()) @map("created_at")
+  updatedAt  DateTime? @default(now()) @updatedAt @map("updated_at")
+
+  @@map("comments")
 }
 
 model Template {
@@ -120,21 +154,25 @@ model TemplateHistory {
 }
 
 model Post {
-  id          Int      @id @default(autoincrement())
+  id          Int       @id @default(autoincrement())
   title       String
-  slug        String   @unique
+  slug        String    @unique
   excerpt     String?
-  content     String
-  coverImage  String?
+  content     String    @map("body")
+  coverImage  String?   @map("featured_image")
   category    String?
   tags        String[]
-  isPublished Boolean  @default(false)
-  publishedAt DateTime?
-  status      String   @default("published")
-  authorId    Int
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  author      User     @relation(fields: [authorId], references: [id])
+  isPublished Boolean   @default(false)
+  publishedAt DateTime? @map("published_date")
+  status      String    @default("published")
+  featured    Boolean?  @default(false)
+  authorId    Int?      @map("author_id")
+  createdAt   DateTime? @default(now()) @map("created_at")
+  updatedAt   DateTime? @default(now()) @updatedAt @map("updated_at")
+  author      User?     @relation(fields: [authorId], references: [id])
+  comments    Comment[]
+
+  @@map("posts")
 }
 
 model Binding {
