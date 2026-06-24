@@ -80,8 +80,23 @@ const getPublicLayout = async (slug) => {
   return layout;
 };
 
+/**
+ * Create a new blog post.
+ * @param {Object} data
+ * @returns {Promise<Object>}
+ */
+const createPost = async (data) => {
+  if (!data.title || !data.content || !data.slug) {
+    const err = new Error('Title, content, and slug are required');
+    err.statusCode = 400;
+    throw err;
+  }
+  return await blogRepository.createPost(data);
+};
+
 module.exports = {
   getPreviewPosts,
   getPostBySlug,
   getPublicLayout,
+  createPost,
 };

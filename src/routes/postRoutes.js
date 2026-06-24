@@ -8,6 +8,9 @@ router.post('/', postController.createPost);
 // GET /api/posts
 router.get('/', postController.getPosts);
 
+// GET /api/posts/slug/:slug  ← must be before /:id
+router.get('/slug/:slug', postController.getPostBySlug);
+
 // GET /api/posts/:id
 router.get('/:id', postController.getPostById);
 
@@ -18,6 +21,7 @@ router.put('/:id', postController.updatePost);
 router.delete('/:id', postController.deletePost);
 
 module.exports = router;
+
 // Preview endpoint — returns limited posts for builder preview
 router.get('/preview/posts', async (req, res) => {
   try {

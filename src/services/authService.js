@@ -44,7 +44,12 @@ const loginUser = async (email, password) => {
     return { user, token };
 };
 
+const getUserById = async (id) => {
+    return await userRepository.findUserById(id);
+};
+
 module.exports = {
     registerUser,
-    loginUser
+    loginUser,
+    getUserById
 };

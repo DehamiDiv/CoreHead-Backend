@@ -19,4 +19,8 @@ router.get('/posts/preview', blogController.getPreviewPosts);
 // Used by: single post pages
 router.get('/posts/:slug', blogController.getPostBySlug);
 
+// POST /api/blog/posts
+// Used by: admin create post page
+router.post('/posts', blogController.createPost);
+
 module.exports = router;

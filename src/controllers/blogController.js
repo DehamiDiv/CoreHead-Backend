@@ -48,8 +48,23 @@ const getPostBySlug = async (req, res) => {
   }
 };
 
+/**
+ * POST /api/blog/posts
+ * Creates a new blog post.
+ */
+const createPost = async (req, res) => {
+  try {
+    const post = await blogService.createPost(req.body);
+    return res.status(201).json(post);
+  } catch (err) {
+    const status = err.statusCode || 500;
+    return res.status(status).json({ error: err.message || 'Failed to create post' });
+  }
+};
+
 module.exports = {
   getPublicLayout,
   getPreviewPosts,
   getPostBySlug,
+  createPost,
 };

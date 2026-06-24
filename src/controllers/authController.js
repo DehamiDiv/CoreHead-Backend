@@ -54,7 +54,13 @@ const login = async (req, res) => {
         res.status(200).json({
             message: 'Login successful',
             token,
-            user: { id: user.id, email: user.email, role: user.role }
+            user: { 
+                id: user.id, 
+                email: user.email, 
+                role: user.role, 
+                name: user.name, 
+                avatar: user.avatar 
+            }
         });
     } catch (error) {
         // 401 Unauthorized for invalid credentials
@@ -64,15 +70,37 @@ const login = async (req, res) => {
 
 const getCurrentUser = async (req, res) => {
     try {
-        // req.user contains the decoded JWT token payload (id, email, role) added by authMiddleware
-        res.status(200).json({ user: req.user });
+        const user = await authService.getUserById(req.user.id);
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        res.status(200).json({ 
+            user: { 
+                id: user.id, 
+                email: user.email, 
+                role: user.role, 
+                name: user.name, 
+                avatar: user.avatar 
+            } 
+        });
     } catch (error) {
         res.status(500).json({ error: 'Failed to fetch user details' });
+    }
+};
+
+const getAllUsers = async (req, res) => {
+    try {
+        const userRepository = require('../repositories/userRepository');
+        const users = await userRepository.findAllUsers();
+        res.status(200).json(users);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch users' });
     }
 };
 
 module.exports = {
     register,
     login,
-    getCurrentUser
+    getCurrentUser,
+    getAllUsers
 };

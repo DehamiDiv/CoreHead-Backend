@@ -1,19 +1,20 @@
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const prisma = require('../models/prismaClient');
 
 // Helper to format post with author details safely
 const formatPostData = (post) => {
   let author = { name: 'Unknown', avatar: 'U' };
-  
+
   if (post.author) {
+    const name = post.author.name || post.author.email?.split('@')[0] || 'Unknown';
     author = {
-      name: post.author.email.split('@')[0],
-      avatar: post.author.email.charAt(0).toUpperCase()
+      id: post.author.id,
+      name,
+      email: post.author.email,
+      avatar: post.author.avatar || name.charAt(0).toUpperCase()
     };
   }
-  
-  // Remove the internal 'author' object from Prisma and replace with formatted 'author'
-  const { author: prismaAuthor, ...postWithoutAuthor } = post;
+
+  const { author: rawAuthor, ...postWithoutAuthor } = post;
   return { ...postWithoutAuthor, author };
 };
 
@@ -26,43 +27,87 @@ exports.createPost = async (req, res) => {
       excerpt,
       content,
       status,
+      featured,
+      categories,
       category,
       tags,
-      authorId,
       thumbnailUrl,
+      authorId,
+      keywords,
+      metaTitle,
+      metaDescription,
+      canonicalUrl,
+      structuredData,
       published_date,
-      categories // Added categories from frontend
+      showToc,
+      allowComments
     } = req.body;
 
-    if (!title || !slug || !content || !authorId) {
-      return res.status(400).json({ error: 'Title, slug, content, and authorId are required.' });
+    if (!title || !slug || !content) {
+      return res.status(400).json({ error: 'Title, slug, and content are required.' });
     }
 
-    // Handle category: take the first one from categories array if category is not provided
-    const finalCategory = category || (categories && categories.length > 0 ? categories[0] : 'General');
+    // Use logged-in user's ID, or fall back to provided authorId, or default to 1
+    const resolvedAuthorId = req.user?.id || parseInt(authorId, 10) || 1;
+
+    // Handle category
+    const finalCategory = category || (Array.isArray(categories) && categories.length > 0 ? categories[0] : 'General');
+
+    // Serialize arrays to comma-separated strings (schema stores as String?)
+    const categoriesStr = Array.isArray(categories)
+      ? categories.join(',')
+      : (typeof categories === 'string' ? categories : '');
+
+    const keywordsStr = Array.isArray(keywords)
+      ? keywords.join(',')
+      : (typeof keywords === 'string' ? keywords : '');
+
+    // Parse structuredData safely
+    let parsedStructuredData = null;
+    if (structuredData) {
+      try {
+        parsedStructuredData = typeof structuredData === 'string'
+          ? JSON.parse(structuredData)
+          : JSON.stringify(structuredData);
+      } catch (_) {
+        parsedStructuredData = String(structuredData);
+      }
+    }
 
     const post = await prisma.post.create({
       data: {
         title,
         slug,
-        excerpt,
+        excerpt:         excerpt         || null,
         content,
-        imageUrl: thumbnailUrl,
-        status: status || 'Published',
-        category: finalCategory,
-        tags: tags || [],
-        authorId: parseInt(authorId, 10),
-        published_date: published_date ? new Date(published_date) : new Date(),
+        coverImage:      thumbnailUrl    || null,
+        status:          status          || 'published',
+        featured:        featured === true || featured === 'true',
+        category:        finalCategory,
+        categories:      categoriesStr   || null,
+        tags:            tags            || [],
+        keywords:        keywordsStr     || null,
+        metaTitle:       metaTitle       || null,
+        metaDescription: metaDescription || null,
+        canonicalUrl:    canonicalUrl    || null,
+        structuredData:  parsedStructuredData,
+        showToc:         showToc === true || showToc === 'true',
+        allowComments:   allowComments === true || allowComments === 'true',
+        authorId:        resolvedAuthorId,
+        publishedAt:     published_date ? new Date(published_date) : new Date(),
       },
+      include: {
+        author: { select: { id: true, email: true, name: true } }
+      }
     });
 
-    res.status(201).json({ message: 'Post created successfully', post });
+    res.status(201).json({ message: 'Post created successfully', ...formatPostData(post) });
   } catch (error) {
     console.error('Error creating post:', error);
     if (error.code === 'P2002') {
       return res.status(400).json({ error: 'A post with this URL slug already exists.' });
     }
-    res.status(500).json({ error: 'Failed to create post.', details: error.message || String(error) });
+    res.status(500).json({ error: 'Failed to create post.', message: error.message });
   }
 };
 
@@ -72,16 +117,17 @@ exports.getPosts = async (req, res) => {
     const { category, limit, status } = req.query;
     
     const where = {};
-    // Security Note: Using Prisma's object-based 'where' clause is safe from SQL injection 
-    // as it uses parameterized queries under the hood.
     if (category) where.category = category;
     if (status)   where.status = status;
+    if (req.query.featured !== undefined) {
+      where.featured = req.query.featured === 'true';
+    }
 
     const posts = await prisma.post.findMany({
       where,
       include: {
         author: {
-          select: { email: true }
+          select: { id: true, email: true, name: true }
         }
       },
       take: limit ? parseInt(limit, 10) : undefined,
@@ -105,9 +151,7 @@ exports.getPostById = async (req, res) => {
     const post = await prisma.post.findUnique({
       where: { id: parseInt(id, 10) },
       include: {
-        author: {
-          select: { email: true }
-        }
+        author: { select: { id: true, email: true, name: true } }
       }
     });
 
@@ -115,11 +159,32 @@ exports.getPostById = async (req, res) => {
       return res.status(404).json({ error: 'Post not found.' });
     }
 
-    const formattedPost = formatPostData(post);
-    res.status(200).json(formattedPost);
+    res.status(200).json(formatPostData(post));
   } catch (error) {
     console.error('Error fetching post:', error);
-    res.status(500).json({ error: 'Failed to fetch post.' });
+    res.status(500).json({ error: 'Failed to fetch post.', message: error.message });
+  }
+};
+
+// Get single post by slug
+exports.getPostBySlug = async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const post = await prisma.post.findUnique({
+      where: { slug },
+      include: {
+        author: { select: { id: true, email: true, name: true } }
+      }
+    });
+
+    if (!post) {
+      return res.status(404).json({ error: 'Post not found.' });
+    }
+
+    res.status(200).json(formatPostData(post));
+  } catch (error) {
+    console.error('Error fetching post by slug:', error);
+    res.status(500).json({ error: 'Failed to fetch post.', message: error.message });
   }
 };
 
@@ -133,37 +198,46 @@ exports.updatePost = async (req, res) => {
       excerpt,
       content,
       status,
-      category,
-      tags,
       thumbnailUrl,
+      category,
+      categories,
+      tags,
+      featured,
       published_date,
-      categories
+      showToc,
+      allowComments
     } = req.body;
 
-    const finalCategory = category || (categories && categories.length > 0 ? categories[0] : undefined);
+    const finalCategory = category || (Array.isArray(categories) && categories.length > 0 ? categories[0] : undefined);
 
     const post = await prisma.post.update({
       where: { id: parseInt(id, 10) },
       data: {
-        title,
-        slug,
-        excerpt,
-        content,
-        imageUrl: thumbnailUrl,
-        status,
-        category: finalCategory,
-        tags,
-        published_date: published_date ? new Date(published_date) : undefined,
+        ...(title        !== undefined && { title }),
+        ...(slug         !== undefined && { slug }),
+        ...(excerpt      !== undefined && { excerpt }),
+        ...(content      !== undefined && { content }),
+        ...(status       !== undefined && { status }),
+        ...(thumbnailUrl !== undefined && { coverImage: thumbnailUrl }),
+        ...(finalCategory !== undefined && { category: finalCategory }),
+        ...(tags         !== undefined && { tags }),
+        ...(featured     !== undefined && { featured: featured === true || featured === 'true' }),
+        ...(published_date !== undefined && { publishedAt: new Date(published_date) }),
+        ...(showToc       !== undefined && { showToc: showToc === true || showToc === 'true' }),
+        ...(allowComments !== undefined && { allowComments: allowComments === true || allowComments === 'true' }),
       },
+      include: {
+        author: { select: { id: true, email: true, name: true } }
+      }
     });
 
-    res.status(200).json({ message: 'Post updated successfully', post });
+    res.status(200).json({ message: 'Post updated successfully', post: formatPostData(post) });
   } catch (error) {
     console.error('Error updating post:', error);
     if (error.code === 'P2002') {
       return res.status(400).json({ error: 'A post with this URL slug already exists.' });
     }
-    res.status(500).json({ error: 'Failed to update post.' });
+    res.status(500).json({ error: 'Failed to update post.', message: error.message });
   }
 };
 
@@ -178,7 +252,6 @@ exports.deletePost = async (req, res) => {
     res.status(200).json({ message: 'Post deleted successfully' });
   } catch (error) {
     console.error('Error deleting post:', error);
-    res.status(500).json({ error: 'Failed to delete post.' });
+    res.status(500).json({ error: 'Failed to delete post.', message: error.message });
   }
 };
-

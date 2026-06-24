@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 const { PrismaClient } = require('@prisma/client');
 
 const prisma = new PrismaClient();
@@ -14,6 +15,12 @@ const bindingRoutes  = require('./routes/bindingRoutes');
 const aiRoutes       = require('./routes/aiRoutes');
 const blogRoutes     = require('./routes/blogRoutes');
 const builderRoutes  = require('./routes/builderRoutes');
+const userRoutes     = require('./routes/userRoutes');
+const pageRoutes     = require('./routes/pageRoutes');
+const categoryRoutes = require('./routes/categoryRoutes');
+const settingsRoutes = require('./routes/settingsRoutes');
+const mediaRoutes    = require('./routes/mediaRoutes');
+const commentRoutes  = require('./routes/commentRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -22,6 +29,9 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// Serve static uploads
+app.use('/uploads', express.static(path.join(__dirname, '../public/uploads')));
 
 // ── Health Check ──
 app.get('/', (req, res) => {
@@ -37,47 +47,34 @@ app.get('/api/preview/posts', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 3;
 
-    // ✅ Uses Prisma with correct model name 'posts'
+    // ✅ Uses the 'Post' model (maps to Post table via User relation)
     const posts = await prisma.post.findMany({
       take: limit,
       where: { status: 'published' },
-      orderBy: { published_date: 'desc' },
+      orderBy: { createdAt: 'desc' },
       select: {
-        id:             true,
-        title:          true,
-        slug:           true,
-        excerpt:        true,
-        featured_image: true,
-        category:       true,
-        tags:           true,
-        published_date: true,
-        author_id:      true,
+        id:         true,
+        title:      true,
+        slug:       true,
+        excerpt:    true,
+        coverImage: true,
+        status:     true,
+        createdAt: true,
+        author: {
+          select: { id: true, email: true }
+        }
       }
     });
 
-    // Get author names separately since posts has author_id not a relation
-    const postsWithAuthor = await Promise.all(
-      posts.map(async (post) => {
-        let author_name   = null;
-        let author_avatar = null;
-
-        if (post.author_id) {
-          const author = await prisma.authors.findUnique({
-            where: { id: post.author_id },
-            select: { name: true, avatar: true }
-          });
-          author_name   = author?.name   || null;
-          author_avatar = author?.avatar || null;
-        }
-
-        return {
-          ...post,
-          imageUrl:      post.featured_image, // friend's code expects imageUrl
-          author_name,
-          author_avatar,
-        };
-      })
-    );
+    const postsWithAuthor = posts.map((post) => ({
+      ...post,
+      featured_image: post.coverImage,
+      published_date: post.createdAt,
+      author_name:    post.author?.email || null,
+      author_avatar:  null,
+      category:       null,
+      tags:           [],
+    }));
 
     return res.status(200).json({
       success: true,
@@ -111,8 +108,14 @@ app.use('/api/builder',   builderRoutes);
 app.use('/api/ai',        aiRoutes);
 app.use('/api',           bindingRoutes);
 app.use('/api/blog',      blogRoutes);
+app.use('/api/users',     userRoutes);
+app.use('/api/pages',     pageRoutes);
+app.use('/api/categories',categoryRoutes);
+app.use('/api/settings',  settingsRoutes);
+app.use('/api/media',     mediaRoutes);
+app.use('/api/comments',  commentRoutes);
 
 // ── Start Server ──
 app.listen(PORT, () => {
-  console.log(`🚀 Server is running on http://localhost:${PORT}`);
+  console.log(`🚀 Server is running on http://localhost:${PORT} `);
 });
