@@ -18,6 +18,7 @@ model User {
   Binding   Binding[]
   posts     Post[]
   Template  Template[]
+  comments  Comment[]
 
   @@map("users")
 }
@@ -54,7 +55,10 @@ model Post {
   isPublished     Boolean   @default(false)
   publishedAt     DateTime?
   tags            String[]
+  showToc         Boolean   @default(false)
+  allowComments   Boolean   @default(false)
   author          User      @relation(fields: [authorId], references: [id])
+  comments        Comment[]
 }
 
 model Binding {
@@ -89,4 +93,21 @@ model Template {
   updatedAt  DateTime
   users      User              @relation(fields: [authorId], references: [id])
   history    TemplateHistory[]
+}
+
+model Comment {
+  id         Int      @id @default(autoincrement())
+  content    String
+  postId     Int
+  userId     Int?
+  userName   String?
+  userAvatar String?
+  status     String   @default("approved")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  post       Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("comments")
 }
