@@ -38,7 +38,9 @@ exports.createPost = async (req, res) => {
       metaDescription,
       canonicalUrl,
       structuredData,
-      published_date
+      published_date,
+      showToc,
+      allowComments
     } = req.body;
 
     if (!title || !slug || !content) {
@@ -89,6 +91,8 @@ exports.createPost = async (req, res) => {
         metaDescription: metaDescription || null,
         canonicalUrl:    canonicalUrl    || null,
         structuredData:  parsedStructuredData,
+        showToc:         showToc === true || showToc === 'true',
+        allowComments:   allowComments === true || allowComments === 'true',
         authorId:        resolvedAuthorId,
         publishedAt:     published_date ? new Date(published_date) : new Date(),
       },
@@ -199,7 +203,9 @@ exports.updatePost = async (req, res) => {
       categories,
       tags,
       featured,
-      published_date
+      published_date,
+      showToc,
+      allowComments
     } = req.body;
 
     const finalCategory = category || (Array.isArray(categories) && categories.length > 0 ? categories[0] : undefined);
@@ -217,6 +223,8 @@ exports.updatePost = async (req, res) => {
         ...(tags         !== undefined && { tags }),
         ...(featured     !== undefined && { featured: featured === true || featured === 'true' }),
         ...(published_date !== undefined && { publishedAt: new Date(published_date) }),
+        ...(showToc       !== undefined && { showToc: showToc === true || showToc === 'true' }),
+        ...(allowComments !== undefined && { allowComments: allowComments === true || allowComments === 'true' }),
       },
       include: {
         author: { select: { id: true, email: true, name: true } }
