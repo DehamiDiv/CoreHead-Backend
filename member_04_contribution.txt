@@ -1,0 +1,29 @@
+Member 04 – Blog Loop, AI Assistant & Integration Contribution Files
+
+Backend Files:
+--------------------------------------------------
+1. src/routes/aiRoutes.js
+2. src/services/aiService.js
+3. src/routes/blogRoutes.js
+4. src/controllers/blogController.js
+5. src/services/blogService.js
+
+Frontend Files:
+--------------------------------------------------
+1. frontend/components/builder/AIGenerateModal.jsx
+2. frontend/components/builder/CMSFieldsPanel.jsx
+3. frontend/components/builder/BlogCard.jsx
+4. frontend/components/builder/BlogCard.css
+5. frontend/components/builder/BlockRenderer.jsx
+6. frontend/components/Renderer/blocks/LoopBlock.tsx
+7. frontend/components/Renderer/PublicPageRenderer.tsx
+
+Summary of Work:
+--------------------------------------------------
+- Integrated LLM API (Groq/Gemini) for AI-based layout generation.
+- Implemented Zod-based JSON schema validation for AI layouts.
+- Developed the Blog Loop query handler with category filtering.
+- Built the Collection List (Blog Loop) component in the builder.
+- Implemented CMS Fields tab and Static/Dynamic content toggles.
+- Integrated AI layout generation into the builder UI.
+- Validated integration between builder and public renderer.

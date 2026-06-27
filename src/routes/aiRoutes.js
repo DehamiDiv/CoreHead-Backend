@@ -104,6 +104,34 @@ router.get('/history', authMiddleware, async (req, res) => {
   }
 });
 
+// ─── DELETE /api/ai/history/:id ───────────────────────────────
+router.delete('/history/:id', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const layout = await prisma.ai_layouts.findUnique({
+      where: { id: parseInt(id) }
+    });
+
+    if (!layout) {
+      return res.status(404).json({ error: 'History not found' });
+    }
+
+    if (layout.user_id !== req.user.id) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+
+    await prisma.ai_layouts.delete({
+      where: { id: parseInt(id) }
+    });
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting AI history:', error);
+    return res.status(500).json({ error: 'Failed to delete AI history' });
+  }
+});
+
 // ─── POST /api/ai/generate-blog ──────────────────────────────
 router.post('/generate-blog', authMiddleware, aiLimiter, async (req, res) => {
   try {
