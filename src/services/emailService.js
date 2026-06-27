@@ -16,9 +16,9 @@ const sendEmail = async (options) => {
     // 2. Define email options
     const mailOptions = {
         from: 'CoreHead <noreply@corehead.com>',
-        to: options.email,
+        to: options.to,
         subject: options.subject,
-        text: options.message,
+        text: options.text,
         html: options.html
     };
 

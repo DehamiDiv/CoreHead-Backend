@@ -85,6 +85,8 @@ model User {
   status               String     @default("active")
   resetPasswordToken   String?
   resetPasswordExpires DateTime?
+  isEmailVerified      Boolean    @default(false)
+  emailVerificationOTP String?
   createdAt            DateTime?  @default(now()) @map("created_at") @db.Timestamp(6)
   updatedAt            DateTime?  @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
   @@map("users")

@@ -22,4 +22,7 @@ router.post('/reset-password', authController.resetPassword);
 // POST /api/auth/refresh-token
 router.post('/refresh-token', authController.refreshToken);
 
+// POST /api/auth/verify-email
+router.post('/verify-email', authController.verifyEmail);
+
 module.exports = router;

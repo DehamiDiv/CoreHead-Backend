@@ -1,4 +1,6 @@
 const authService = require('../services/authService');
+const validate = require('deep-email-validator');
+
 
 const register = async (req, res) => {
     try {
@@ -9,11 +11,28 @@ const register = async (req, res) => {
             return res.status(400).json({ error: 'Email and password are required' });
         }
 
-        // Email Format Validation (Regex)
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(email)) {
-            return res.status(400).json({ error: 'Invalid email format' });
+        // Deep Email Validation (Check for typos, disposable emails, and MX records)
+        const validationResult = await validate.validate(email);
+        if (!validationResult.valid) {
+            let errorMessage = 'Invalid email address.';
+            
+            const { validators } = validationResult;
+            
+            if (validators.typo && !validators.typo.valid && validators.typo.bestSuggestion) {
+                errorMessage = `Did you mean ${validators.typo.bestSuggestion}?`;
+            } else if (validators.mx && !validators.mx.valid) {
+                errorMessage = 'The email domain does not exist or cannot receive emails.';
+            } else if (validators.disposable && !validators.disposable.valid) {
+                errorMessage = 'Disposable email addresses are not allowed.';
+            } else if (validators.regex && !validators.regex.valid) {
+                errorMessage = 'Please enter a valid email address format.';
+            } else if (validators.smtp && !validators.smtp.valid) {
+                errorMessage = 'This email account does not appear to exist.';
+            }
+            
+            return res.status(400).json({ error: errorMessage });
         }
+
 
         // Strong Password Validation
         const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
@@ -113,10 +132,28 @@ const resetPassword = async (req, res) => {
     }
 };
 
+const verifyEmail = async (req, res) => {
+    try {
+        const { email, otp } = req.body;
+        if (!email || !otp) {
+            return res.status(400).json({ error: 'Email and OTP are required' });
+        }
+
+        await authService.verifyEmail(email, otp);
+
+        res.status(200).json({
+            message: 'Email verified successfully! You can now log in.'
+        });
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+    }
+};
+
 module.exports = {
     register,
     login,
     refreshToken,
+    verifyEmail,
     getCurrentUser,
     forgotPassword,
     resetPassword
