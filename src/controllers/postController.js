@@ -12,7 +12,6 @@ const formatPostData = (post) => {
     };
   }
   
-  // Remove the internal 'authors' object from Prisma and replace with formatted 'author'
   const { authors, ...postWithoutAuthors } = post;
   return { ...postWithoutAuthors, author };
 };
@@ -28,13 +27,14 @@ exports.createPost = async (req, res) => {
       status,
       category,
       tags,
-      authorId,
       thumbnailUrl,
       published_date
     } = req.body;
 
-    if (!title || !slug || !content || !authorId) {
-      return res.status(400).json({ error: 'Title, slug, content, and authorId are required.' });
+    const authorId = req.user.id; // Use ID from token
+
+    if (!title || !slug || !content) {
+      return res.status(400).json({ error: 'Title, slug, and content are required.' });
     }
 
     const post = await prisma.post.create({
@@ -47,7 +47,7 @@ exports.createPost = async (req, res) => {
         status: status || 'Published',
         category: category || 'General',
         tags: tags || [],
-        author_id: parseInt(authorId, 10),
+        author_id: authorId,
         published_date: published_date ? new Date(published_date) : new Date(),
       },
     });
@@ -62,16 +62,21 @@ exports.createPost = async (req, res) => {
   }
 };
 
-// Get all posts
+// Get all posts (filtered by user unless admin)
 exports.getPosts = async (req, res) => {
   try {
     const { category, limit, status } = req.query;
+    const userId = req.user.id;
+    const userRole = req.user.role;
     
     const where = {};
-    // Security Note: Using Prisma's object-based 'where' clause is safe from SQL injection 
-    // as it uses parameterized queries under the hood.
     if (category) where.category = category;
     if (status)   where.status = status;
+
+    // Filter by user unless admin
+    if (userRole !== 'admin') {
+      where.author_id = userId;
+    }
 
     const posts = await prisma.post.findMany({
       where,
@@ -98,6 +103,9 @@ exports.getPosts = async (req, res) => {
 exports.getPostById = async (req, res) => {
   try {
     const { id } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
     const post = await prisma.post.findUnique({
       where: { id: parseInt(id, 10) },
       include: {
@@ -109,6 +117,11 @@ exports.getPostById = async (req, res) => {
 
     if (!post) {
       return res.status(404).json({ error: 'Post not found.' });
+    }
+
+    // Ownership check
+    if (userRole !== 'admin' && post.author_id !== userId) {
+      return res.status(403).json({ error: 'Access denied. This post does not belong to you.' });
     }
 
     const formattedPost = formatPostData(post);
@@ -134,6 +147,19 @@ exports.updatePost = async (req, res) => {
       thumbnailUrl,
       published_date
     } = req.body;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    // Check existence and ownership first
+    const existingPost = await prisma.post.findUnique({
+      where: { id: parseInt(id, 10) }
+    });
+
+    if (!existingPost) return res.status(404).json({ error: 'Post not found.' });
+
+    if (userRole !== 'admin' && existingPost.author_id !== userId) {
+      return res.status(403).json({ error: 'Access denied. You can only update your own posts.' });
+    }
 
     const post = await prisma.post.update({
       where: { id: parseInt(id, 10) },
@@ -165,6 +191,19 @@ exports.updatePost = async (req, res) => {
 exports.deletePost = async (req, res) => {
   try {
     const { id } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    const existingPost = await prisma.post.findUnique({
+      where: { id: parseInt(id, 10) }
+    });
+
+    if (!existingPost) return res.status(404).json({ error: 'Post not found.' });
+
+    if (userRole !== 'admin' && existingPost.author_id !== userId) {
+      return res.status(403).json({ error: 'Access denied. You can only delete your own posts.' });
+    }
+
     await prisma.post.delete({
       where: { id: parseInt(id, 10) }
     });
@@ -175,4 +214,3 @@ exports.deletePost = async (req, res) => {
     res.status(500).json({ error: 'Failed to delete post.' });
   }
 };
-

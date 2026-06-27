@@ -1,6 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const builderController = require('../controllers/builderController');
+const authMiddleware = require('../middlewares/authMiddleware');
+
+// All builder routes require authentication
+router.use(authMiddleware);
 
 // Routes for /api/builder/layouts
 router.post('/layouts',     builderController.saveLayout);
