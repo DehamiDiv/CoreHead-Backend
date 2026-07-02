@@ -218,6 +218,286 @@ User prompt: "${prompt}"
     }));
 
     return { blocks, isFallback };
+  },
+
+  async generateBlogContent({ topic, tone, keywords, wordCount }) {
+    const GROQ_API_KEY = process.env.GROQ_API_KEY;
+    const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.1-8b-instant';
+
+    if (!GROQ_API_KEY) {
+      throw new Error('No GROQ_API_KEY found in backend environment variables.');
+    }
+
+    const groq = getGroqClient();
+    if (!groq) {
+      throw new Error('Groq client could not be initialized.');
+    }
+
+    const systemPrompt = `
+You are an expert copywriter. Generate a high-quality blog post in Markdown format.
+You MUST respond only in JSON matching this exact schema:
+{
+  "title": "Post Title",
+  "excerpt": "A 2-3 sentence teaser summary of the post.",
+  "content": "The full blog post content formatted in rich Markdown.",
+  "seo": {
+    "metaTitle": "SEO-optimized title under 60 chars.",
+    "metaDescription": "SEO description under 160 chars.",
+    "keywords": ["list", "of", "relevant", "keywords"]
+  }
+}
+
+Rules:
+- Respond with a raw JSON object ONLY. No markdown wrapper blocks (like \`\`\`json), no extra explanations.
+- The "content" field should be formatted cleanly in Markdown (with headers, paragraphs, and list items as appropriate).
+- Do not repeat the title inside the content body.
+- Do not include HTML. Keep it clean markdown.
+`;
+
+    const prompt = `
+Write a blog post about: "${topic}".
+Tone: ${tone || 'informative and professional'}.
+Keywords to incorporate: ${keywords ? keywords.join(', ') : 'none'}.
+Target Word Count: ${wordCount || '1000 words'}.
+`;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
+
+    try {
+      const chatCompletion = await groq.chat.completions.create({
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: prompt }
+        ],
+        model: GROQ_MODEL,
+        temperature: 0.7,
+        response_format: { type: "json_object" }
+      }, {
+        signal: controller.signal
+      });
+
+      if (!chatCompletion || !chatCompletion.choices || !chatCompletion.choices[0]) {
+        throw new Error('Invalid response received from Groq AI provider.');
+      }
+
+      const text = chatCompletion.choices[0].message?.content || '{}';
+      console.log('--- RAW GROQ AI RESPONSE ---');
+      console.log(text);
+      console.log('----------------------------');
+      
+      let parsedResult;
+      try {
+        parsedResult = JSON.parse(text);
+      } catch (parseError) {
+        throw new Error('Failed to parse Groq AI response as JSON.');
+      }
+
+      // 1. Unify parent nesting if AI wrapped response inside a root object (e.g., post: { ... } or blog: { ... })
+      const rootKeys = Object.keys(parsedResult);
+      if (rootKeys.length === 1 && typeof parsedResult[rootKeys[0]] === 'object' && parsedResult[rootKeys[0]] !== null) {
+        parsedResult = parsedResult[rootKeys[0]];
+      }
+
+      // Helper to match key names case-insensitively and with synonym fallbacks
+      const findKey = (obj, possibilities) => {
+        const lowerPossibilities = possibilities.map(p => p.toLowerCase());
+        const key = Object.keys(obj).find(k => lowerPossibilities.includes(k.toLowerCase()));
+        return key ? obj[key] : null;
+      };
+
+      const title = findKey(parsedResult, ['title', 'postTitle', 'blogTitle', 'headline', 'subject']);
+      const content = findKey(parsedResult, ['content', 'body', 'markdown', 'postContent', 'text']);
+      const excerpt = findKey(parsedResult, ['excerpt', 'summary', 'description', 'teaser']) || '';
+      
+      let seo = findKey(parsedResult, ['seo', 'seoMetadata', 'metadata', 'seo_metadata', 'seoDetails']);
+      
+      let finalSeo = {
+        metaTitle: '',
+        metaDescription: '',
+        keywords: []
+      };
+
+      if (seo && typeof seo === 'object') {
+        finalSeo.metaTitle = findKey(seo, ['metaTitle', 'seoTitle', 'title']) || title || '';
+        finalSeo.metaDescription = findKey(seo, ['metaDescription', 'seoDescription', 'description']) || excerpt || '';
+        finalSeo.keywords = findKey(seo, ['keywords', 'tags']) || [];
+      } else {
+        finalSeo.metaTitle = findKey(parsedResult, ['metaTitle', 'seoTitle']) || title || '';
+        finalSeo.metaDescription = findKey(parsedResult, ['metaDescription', 'seoDescription']) || excerpt || '';
+        finalSeo.keywords = findKey(parsedResult, ['keywords', 'tags']) || [];
+      }
+
+      if (!title || !content) {
+        throw new Error(`AI response did not contain title or content fields. Keys returned: ${Object.keys(parsedResult).join(', ')}`);
+      }
+
+      return {
+        title,
+        excerpt,
+        content,
+        seo: {
+          metaTitle: finalSeo.metaTitle,
+          metaDescription: finalSeo.metaDescription,
+          keywords: Array.isArray(finalSeo.keywords) ? finalSeo.keywords : (typeof finalSeo.keywords === 'string' ? finalSeo.keywords.split(',') : [])
+        }
+      };
+
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        throw new Error('AI request timed out. Please try again.');
+      }
+      console.error('[AI Content Generation Error]', error.message);
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  },
+
+  async modifyLayout(currentBlocks, instruction) {
+    const GROQ_API_KEY = process.env.GROQ_API_KEY;
+    const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.1-8b-instant';
+
+    if (!GROQ_API_KEY) {
+      console.warn('No GROQ_API_KEY found. Using programmatic fallback for modification.');
+      return { blocks: this.modifyFallback(currentBlocks, instruction) };
+    }
+
+    const groq = getGroqClient();
+    if (!groq) {
+      console.error('Groq client could not be initialized for layout modification.');
+      return { blocks: this.modifyFallback(currentBlocks, instruction) };
+    }
+
+    const systemPrompt = `
+You are a CMS layout modification assistant.
+You are given:
+1. The user's current array of layout blocks.
+2. An instruction on what modification to perform (e.g. add a button, change titles, delete blocks, swap order).
+
+You must parse the current array of blocks and generate the MODIFIED array of blocks.
+Each block in the output array MUST follow this exact schema:
+{
+  "id": "<keep the same id if modified/unchanged, or create random UUID if new block>",
+  "type": "<one of: Heading | Paragraph | Image | Quote | Divider | Button | Collection List | hero | card | banner | featured | quote | newsletter>",
+  "content": <content string or object>,
+  "styles": { <optional CSS-in-JS style properties> }
+}
+
+Keep existing block IDs unchanged unless you are deleting them or adding new ones.
+Make sure you strictly apply the user's instructions.
+Return ONLY a valid JSON object with a single root property "blocks" containing the array of modified blocks. Do not return markdown code blocks, do not return explanations.
+`;
+
+    const userPrompt = `
+Current Layout Blocks:
+${JSON.stringify(currentBlocks, null, 2)}
+
+User Instruction:
+"${instruction}"
+`;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
+
+    try {
+      const chatCompletion = await groq.chat.completions.create({
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        model: GROQ_MODEL,
+        temperature: 0.2,
+        response_format: { type: "json_object" }
+      }, {
+        signal: controller.signal
+      });
+
+      if (!chatCompletion || !chatCompletion.choices || !chatCompletion.choices[0]) {
+        throw new Error('Invalid response received from AI provider.');
+      }
+
+      const text = chatCompletion.choices[0].message?.content || '{}';
+      
+      let parsedResult;
+      try {
+        parsedResult = JSON.parse(text);
+      } catch (parseError) {
+        throw new Error('Failed to parse AI response as JSON.');
+      }
+
+      const layoutSchema = z.object({
+        blocks: z.array(z.object({
+          id: z.string().optional(),
+          type: z.string(),
+          content: z.any().optional(),
+          styles: z.any().optional(),
+          title: z.string().optional(),
+          excerpt: z.string().optional(),
+          author: z.string().optional(),
+          date: z.string().optional(),
+          image: z.string().optional(),
+          category: z.string().optional()
+        }))
+      });
+
+      const validation = layoutSchema.safeParse(parsedResult);
+      if (!validation.success) {
+        console.error('Modify validation failed:', validation.error.format());
+        throw new Error('AI modified response did not match expected schema.');
+      }
+
+      const blocks = validation.data.blocks.map(block => ({
+        ...block,
+        id: block.id || randomUUID()
+      }));
+
+      return { blocks };
+
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        throw new Error('AI_TIMEOUT');
+      }
+      console.error('[AI Modify Error]', error.message);
+      return { blocks: this.modifyFallback(currentBlocks, instruction) };
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  },
+
+  modifyFallback(currentBlocks, instruction) {
+    const lower = instruction.toLowerCase();
+    const id = () => randomUUID();
+    
+    if (lower.includes('add') || lower.includes('insert') || lower.includes('create') || lower.includes('new')) {
+      return [
+        ...currentBlocks,
+        {
+          id: id(),
+          type: 'banner',
+          title: 'AI Refined Banner',
+          excerpt: `Modified block generated according to: "${instruction}"`,
+          date: new Date().toISOString().split('T')[0],
+          category: 'Refined'
+        }
+      ];
+    }
+    
+    if (lower.includes('delete') || lower.includes('remove')) {
+      if (currentBlocks.length > 1) {
+        return currentBlocks.slice(0, -1);
+      }
+    }
+    
+    return [
+      ...currentBlocks,
+      {
+        id: id(),
+        type: 'Heading',
+        content: `Refined: "${instruction}"`,
+        styles: { textAlign: 'center', color: '#4f46e5', marginTop: '20px' }
+      }
+    ];
   }
 };
 

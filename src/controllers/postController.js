@@ -97,7 +97,7 @@ exports.createPost = async (req, res) => {
         publishedAt:     published_date ? new Date(published_date) : new Date(),
       },
       include: {
-        author: { select: { id: true, email: true, name: true } }
+        author: { select: { id: true, email: true } }
       }
     });
 
@@ -126,7 +126,7 @@ exports.getPosts = async (req, res) => {
     }
 
     // Filter by user unless admin
-    if (userRole !== 'admin') {
+    if (userRole?.toLowerCase() !== 'admin') {
       where.authorId = userId;
     }
 
@@ -134,7 +134,7 @@ exports.getPosts = async (req, res) => {
       where,
       include: {
         author: {
-          select: { id: true, email: true, name: true }
+          select: { id: true, email: true }
         }
       },
       take: limit ? parseInt(limit, 10) : undefined,
@@ -161,7 +161,7 @@ exports.getPostById = async (req, res) => {
     const post = await prisma.post.findUnique({
       where: { id: parseInt(id, 10) },
       include: {
-        author: { select: { id: true, email: true, name: true } }
+        author: { select: { id: true, email: true } }
       }
     });
 
@@ -170,7 +170,7 @@ exports.getPostById = async (req, res) => {
     }
 
     // Ownership check
-    if (userRole !== 'admin' && post.authorId !== userId) {
+    if (userRole?.toLowerCase() !== 'admin' && post.authorId !== userId) {
       return res.status(403).json({ error: 'Access denied. This post does not belong to you.' });
     }
 
@@ -189,7 +189,7 @@ exports.getPostBySlug = async (req, res) => {
     const post = await prisma.post.findUnique({
       where: { slug },
       include: {
-        author: { select: { id: true, email: true, name: true } }
+        author: { select: { id: true, email: true } }
       }
     });
 
@@ -235,7 +235,7 @@ exports.updatePost = async (req, res) => {
 
     if (!existingPost) return res.status(404).json({ error: 'Post not found.' });
 
-    if (userRole !== 'admin' && existingPost.authorId !== userId) {
+    if (userRole?.toLowerCase() !== 'admin' && existingPost.authorId !== userId) {
       return res.status(403).json({ error: 'Access denied. You can only update your own posts.' });
     }
 
@@ -256,7 +256,7 @@ exports.updatePost = async (req, res) => {
         ...(allowComments !== undefined && { allowComments: allowComments === true || allowComments === 'true' }),
       },
       include: {
-        author: { select: { id: true, email: true, name: true } }
+        author: { select: { id: true, email: true } }
       }
     });
 
@@ -283,7 +283,7 @@ exports.deletePost = async (req, res) => {
 
     if (!existingPost) return res.status(404).json({ error: 'Post not found.' });
 
-    if (userRole !== 'admin' && existingPost.authorId !== userId) {
+    if (userRole?.toLowerCase() !== 'admin' && existingPost.authorId !== userId) {
       return res.status(403).json({ error: 'Access denied. You can only delete your own posts.' });
     }
 

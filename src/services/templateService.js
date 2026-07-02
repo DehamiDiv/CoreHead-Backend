@@ -25,7 +25,7 @@ const createTemplate = async (authorId, templateData) => {
 
 const getTemplates = async (userId, userRole) => {
     // If Admin, show all. If regular User, only show their own.
-    if (userRole === 'admin') {
+    if (userRole?.toLowerCase() === 'admin') {
         return await templateRepo.getAllTemplates();
     } else {
         // We need a way to filter in repo, or filter here. 
@@ -40,7 +40,7 @@ const getTemplateById = async (id, userId, userRole) => {
     if (!template) return null;
 
     // Check ownership if not admin
-    if (userRole !== 'admin' && template.authorId !== userId) {
+    if (userRole?.toLowerCase() !== 'admin' && template.authorId !== userId) {
         throw new Error("Access denied. This template does not belong to you.");
     }
 
@@ -55,7 +55,7 @@ const updateTemplate = async (id, templateData, userId, userRole) => {
     }
 
     // Check ownership if not admin
-    if (userRole !== 'admin' && currentTemplate.authorId !== userId) {
+    if (userRole?.toLowerCase() !== 'admin' && currentTemplate.authorId !== userId) {
         throw new Error("Access denied. You can only update your own templates.");
     }
 
@@ -84,7 +84,7 @@ const deleteTemplate = async (id, userId, userRole) => {
     }
 
     // Check ownership if not admin
-    if (userRole !== 'admin' && currentTemplate.authorId !== userId) {
+    if (userRole?.toLowerCase() !== 'admin' && currentTemplate.authorId !== userId) {
         throw new Error("Access denied. You can only delete your own templates.");
     }
 
@@ -103,7 +103,7 @@ const publishTemplate = async (id, userId, userRole) => {
     }
 
     // Check ownership if not admin
-    if (userRole !== 'admin' && template.authorId !== userId) {
+    if (userRole?.toLowerCase() !== 'admin' && template.authorId !== userId) {
         throw new Error("Access denied. You can only publish your own templates.");
     }
 
@@ -118,7 +118,7 @@ const publishTemplate = async (id, userId, userRole) => {
  * Only Admins should be able to assign global/category templates for the whole site.
  */
 const assignTemplate = async (id, assignData, userRole) => {
-    if (userRole !== 'admin') {
+    if (userRole?.toLowerCase() !== 'admin') {
         throw new Error("Access denied. Only admins can assign templates to categories or site-wide defaults.");
     }
 

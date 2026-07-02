@@ -39,7 +39,7 @@ const getLayouts = async (req, res) => {
     };
 
     // If not admin, only show user's own layouts
-    if (userRole !== 'admin') {
+    if (userRole?.toLowerCase() !== 'admin') {
       query.where = { user_id: userId };
     }
 
@@ -64,7 +64,7 @@ const getLayoutById = async (req, res) => {
     if (!layout) return res.status(404).json({ error: 'Layout not found' });
 
     // Check ownership
-    if (userRole !== 'admin' && layout.user_id !== userId) {
+    if (userRole?.toLowerCase() !== 'admin' && layout.user_id !== userId) {
       return res.status(403).json({ error: 'Access denied. This layout does not belong to you.' });
     }
 
@@ -89,7 +89,7 @@ const updateLayout = async (req, res) => {
 
     if (!existingLayout) return res.status(404).json({ error: 'Layout not found' });
 
-    if (userRole !== 'admin' && existingLayout.user_id !== userId) {
+    if (userRole?.toLowerCase() !== 'admin' && existingLayout.user_id !== userId) {
       return res.status(403).json({ error: 'Access denied. You can only update your own layouts.' });
     }
 
@@ -123,7 +123,7 @@ const deleteLayout = async (req, res) => {
 
     if (!existingLayout) return res.status(404).json({ error: 'Layout not found' });
 
-    if (userRole !== 'admin' && existingLayout.user_id !== userId) {
+    if (userRole?.toLowerCase() !== 'admin' && existingLayout.user_id !== userId) {
       return res.status(403).json({ error: 'Access denied. You can only delete your own layouts.' });
     }
 

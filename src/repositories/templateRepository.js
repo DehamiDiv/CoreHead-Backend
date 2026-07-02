@@ -3,24 +3,24 @@ const prisma = require('../models/prismaClient');
 const createTemplate = async (data) => {
     const userCheck = await prisma.user.findUnique({ where: { id: data.authorId } });
     console.log("Does user exist?", !!userCheck);
-    return await prisma.template.create({ data: { authorId: data.authorId, name: data.name, type: data.type, layoutJson: data.layoutJson } });
+    return await prisma.templates.create({ data: { authorId: data.authorId, name: data.name, type: data.type, layoutJson: data.layoutJson } });
 };
 
 const getAllTemplates = async () => {
-    return await prisma.template.findMany({
+    return await prisma.templates.findMany({
         orderBy: { createdAt: 'desc' },
         include: { author: { select: { email: true } } } // Include author email for the dashboard
     });
 };
 
 const getTemplateById = async (id) => {
-    return await prisma.template.findUnique({
+    return await prisma.templates.findUnique({
         where: { id: parseInt(id) }
     });
 };
 
 const updateTemplate = async (id, data, newVersion) => {
-    return await prisma.template.update({
+    return await prisma.templates.update({
         where: { id: parseInt(id) },
         data: {
             ...data,
@@ -41,7 +41,7 @@ const saveTemplateHistory = async (templateId, version, layoutJson, updatedBy) =
 };
 
 const deleteTemplate = async (id) => {
-    return await prisma.template.delete({
+    return await prisma.templates.delete({
         where: { id: parseInt(id) }
     });
 };
@@ -52,7 +52,7 @@ const deleteTemplate = async (id) => {
  * Publish a template by setting its status to 'published'.
  */
 const publishTemplate = async (id) => {
-    return await prisma.template.update({
+    return await prisma.templates.update({
         where: { id: parseInt(id) },
         data: { status: 'published' }
     });
@@ -69,13 +69,13 @@ const assignTemplate = async (id, categoryId, isGlobalDefault) => {
     if (isGlobalDefault) {
         // Fetch the type of the template being promoted so we only clear
         // global defaults that share the same type.
-        const target = await prisma.template.findUnique({
+        const target = await prisma.templates.findUnique({
             where: { id: templateId },
             select: { type: true }
         });
 
         // Clear any existing global_default for this type
-        await prisma.template.updateMany({
+        await prisma.templates.updateMany({
             where: {
                 type: target.type,
                 category: 'global_default'
@@ -83,14 +83,14 @@ const assignTemplate = async (id, categoryId, isGlobalDefault) => {
             data: { category: null }
         });
 
-        return await prisma.template.update({
+        return await prisma.templates.update({
             where: { id: templateId },
             data: { category: 'global_default' }
         });
     }
 
     // Category-specific assignment
-    return await prisma.template.update({
+    return await prisma.templates.update({
         where: { id: templateId },
         data: { category: categoryId }
     });
@@ -104,7 +104,7 @@ const assignTemplate = async (id, categoryId, isGlobalDefault) => {
  */
 const resolveActiveLayout = async (templateType, categoryId) => {
     // Priority 1: category-specific published template
-    const specific = await prisma.template.findFirst({
+    const specific = await prisma.templates.findFirst({
         where: {
             type: templateType,
             category: categoryId,
@@ -115,7 +115,7 @@ const resolveActiveLayout = async (templateType, categoryId) => {
     if (specific) return specific;
 
     // Priority 2: global default published template
-    const globalDefault = await prisma.template.findFirst({
+    const globalDefault = await prisma.templates.findFirst({
         where: {
             type: templateType,
             category: 'global_default',

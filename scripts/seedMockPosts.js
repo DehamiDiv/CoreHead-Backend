@@ -4,54 +4,65 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('Seeding mock posts...');
 
-  // Create an author first
-  const author = await prisma.authors.create({
-    data: {
-      name: 'Yaluwa',
-      email: 'yaluwa@example.com',
-      bio: 'A cool friend sharing ideas.',
-      avatar: 'https://i.pravatar.cc/150?u=a042581f4e29026704d',
-    }
+  // Get or create the admin user to associate posts with
+  let user = await prisma.user.findUnique({
+    where: { email: 'admin@corehead.com' }
   });
 
+  if (!user) {
+    // If not found, create a temporary user
+    const bcrypt = require('bcryptjs');
+    const hashedPassword = await bcrypt.hash('Admin@CoreHead2026', 10);
+    user = await prisma.user.create({
+      data: {
+        email: 'admin@corehead.com',
+        password: hashedPassword,
+        role: 'admin',
+        isEmailVerified: true,
+        name: 'Administrator'
+      }
+    });
+  }
+
   // Create some mock published posts
+  // Note: We use the Prisma model field names: content, coverImage, authorId, publishedAt
   await prisma.post.createMany({
     data: [
       {
         title: 'Exploring the new Frontend',
         slug: 'exploring-frontend',
         excerpt: 'This is a test post from a friend.',
-        body: '<p>Content of the first friend post.</p>',
-        featured_image: 'https://picsum.photos/seed/1/800/600',
+        content: '<p>Content of the first friend post.</p>',
+        coverImage: 'https://picsum.photos/seed/1/800/600',
         category: 'Technology',
         tags: ['frontend', 'friend'],
-        author_id: author.id,
+        authorId: user.id,
         status: 'published',
-        published_date: new Date()
+        publishedAt: new Date()
       },
       {
         title: 'How to build great APIs',
         slug: 'how-to-build-apis',
         excerpt: 'Learning backend connections.',
-        body: '<p>Some awesome backend content here.</p>',
-        featured_image: 'https://picsum.photos/seed/2/800/600',
+        content: '<p>Some awesome backend content here.</p>',
+        coverImage: 'https://picsum.photos/seed/2/800/600',
         category: 'Backend',
         tags: ['api', 'nodejs'],
-        author_id: author.id,
+        authorId: user.id,
         status: 'published',
-        published_date: new Date()
+        publishedAt: new Date()
       },
       {
         title: 'Life in Sri Lanka',
         slug: 'life-in-sri-lanka',
         excerpt: 'A beautiful journey.',
-        body: '<p>Sri Lanka is wonderful.</p>',
-        featured_image: 'https://picsum.photos/seed/3/800/600',
+        content: '<p>Sri Lanka is wonderful.</p>',
+        coverImage: 'https://picsum.photos/seed/3/800/600',
         category: 'Lifestyle',
         tags: ['travel'],
-        author_id: author.id,
+        authorId: user.id,
         status: 'published',
-        published_date: new Date()
+        publishedAt: new Date()
       }
     ]
   });
