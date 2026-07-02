@@ -4,7 +4,13 @@ const prisma = new PrismaClient();
 // Get all comments with post details
 exports.getComments = async (req, res) => {
   try {
+    const { postId } = req.query;
+    const where = {};
+    if (postId) {
+      where.postId = parseInt(postId, 10);
+    }
     const comments = await prisma.comment.findMany({
+      where,
       include: {
         post: {
           select: { title: true, slug: true }

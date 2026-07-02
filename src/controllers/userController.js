@@ -4,9 +4,10 @@ const bcrypt = require('bcryptjs');
 
 exports.inviteUser = async (req, res) => {
   try {
-    const { email, role } = req.body;
-    if (!email) {
-      return res.status(400).json({ success: false, message: 'Email is required' });
+    const { email, password, role, name, nicename, designation, bio, avatar } = req.body;
+    
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: 'Email and password are required' });
     }
 
     // Check if user already exists
@@ -15,31 +16,36 @@ exports.inviteUser = async (req, res) => {
       return res.status(400).json({ success: false, message: 'User already exists' });
     }
 
-    // Create a new user with a dummy password for now (they should reset it in a real flow)
     const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash('temp1234', salt);
+    const hashedPassword = await bcrypt.hash(password, salt);
 
     const newUser = await prisma.user.create({
       data: {
         email,
         password: hashedPassword,
-        role: role || 'Editor'
+        role: role || 'Editor',
+        name,
+        nicename,
+        designation,
+        bio,
+        avatar
       }
     });
 
     return res.status(201).json({
       success: true,
-      message: 'User invited successfully',
+      message: 'User created successfully',
       user: {
         id: newUser.id,
         email: newUser.email,
-        role: newUser.role
+        role: newUser.role,
+        name: newUser.name
       }
     });
 
   } catch (error) {
-    console.error('Invite error:', error);
-    res.status(500).json({ success: false, message: 'Server error during invitation' });
+    console.error('Invite user error:', error);
+    res.status(500).json({ success: false, message: 'Server error during user creation: ' + error.message });
   }
 };
 
@@ -51,7 +57,11 @@ exports.getUsers = async (req, res) => {
         email: true,
         role: true,
         name: true,
+        status: true,
         createdAt: true,
+      },
+      orderBy: {
+        createdAt: 'desc'
       }
     });
     return res.status(200).json({ success: true, users });
@@ -61,12 +71,40 @@ exports.getUsers = async (req, res) => {
   }
 };
 
+// Alias for getallusers to support the feature/user-access route naming
+exports.getAllUsers = async (req, res) => {
+  try {
+    const users = await prisma.user.findMany({
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        name: true,
+        status: true,
+        createdAt: true,
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+    return res.status(200).json(users); // Returns array directly as expected by feature/user-access front-end
+  } catch (error) {
+    console.error('GetAllUsers error:', error);
+    res.status(500).json({ error: 'Failed to fetch users' });
+  }
+};
+
 exports.updateUser = async (req, res) => {
   try {
     const { id } = req.params;
-    const { email, role, password, name } = req.body;
+    const { email, role, password, name, status } = req.body;
 
-    const dataToUpdate = { email, role, name };
+    const dataToUpdate = {};
+    if (email !== undefined) dataToUpdate.email = email;
+    if (role !== undefined) dataToUpdate.role = role;
+    if (name !== undefined) dataToUpdate.name = name;
+    if (status !== undefined) dataToUpdate.status = status;
+
     if (password) {
       const salt = await bcrypt.genSalt(10);
       dataToUpdate.password = await bcrypt.hash(password, salt);
@@ -75,10 +113,18 @@ exports.updateUser = async (req, res) => {
     const updatedUser = await prisma.user.update({
       where: { id: parseInt(id) },
       data: dataToUpdate,
-      select: { id: true, email: true, role: true, name: true }
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        name: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true
+      }
     });
 
-    return res.status(200).json({ success: true, message: 'User updated successfully', user: updatedUser });
+    return res.status(200).json(updatedUser);
   } catch (error) {
     console.error('Update user error:', error);
     res.status(500).json({ success: false, message: 'Server error updating user: ' + error.message });

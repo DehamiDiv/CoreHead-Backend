@@ -117,5 +117,11 @@ app.use('/api/comments',  commentRoutes);
 
 // ── Start Server ──
 app.listen(PORT, () => {
-  console.log(`🚀 Server is running on http://localhost:${PORT} `);
+  console.log(`Server is running on http://localhost:${PORT}`);
 });
+
+
+// Register binding-related API routes under the "/api" base path
+const bindingRoutes = require("./routes/bindingRoutes");
+
+app.use("/api", bindingRoutes);

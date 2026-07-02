@@ -7,21 +7,83 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        Int        @id(map: "User_pkey") @default(autoincrement())
-  email     String     @unique(map: "User_email_key")
-  password  String
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  role      String     @default("user")
-  name      String?
-  Binding   Binding[]
-  posts     Post[]
-  Template  Template[]
-
-  @@map("users")
+model ai_layouts {
+  id               Int       @id @default(autoincrement())
+  user_id          Int?
+  prompt           String
+  layout_type      String?   @db.VarChar(50)
+  design_style     String?   @db.VarChar(50)
+  features         Json?
+  generated_layout Json
+  created_at       DateTime? @default(now()) @db.Timestamp(6)
 }
 
+model authors {
+  id           Int       @id @default(autoincrement())
+  name         String    @db.VarChar(100)
+  email        String    @unique @db.VarChar(255)
+  bio          String?
+  avatar       String?   @db.VarChar(500)
+  social_links Json?
+  created_at   DateTime? @default(now()) @db.Timestamp(6)
+}
+
+model builder_layouts {
+  id           Int       @id @default(autoincrement())
+  name         String    @db.VarChar(255)
+  layout_data  Json
+  content_mode String?   @default("static") @db.VarChar(20)
+  grid_layout  String?   @default("grid") @db.VarChar(50)
+  user_id      Int?
+  created_at   DateTime? @default(now()) @db.Timestamp(6)
+  updated_at   DateTime? @default(now()) @db.Timestamp(6)
+
+  @@index([updated_at(sort: Desc)], map: "idx_builder_layouts_updated")
+  @@index([user_id], map: "idx_builder_layouts_user")
+}
+
+model categories {
+  id          Int       @id @default(autoincrement())
+  name        String    @unique @db.VarChar(100)
+  slug        String    @unique @db.VarChar(100)
+  description String?
+  created_at  DateTime? @default(now()) @db.Timestamp(6)
+}
+
+model User {
+  id        Int        @id @default(autoincrement()) // Primary Key
+  email     String     @unique                       // Must be unique for login
+  password  String                                 // Hashed password
+  templates Template[]                               // A user can create many templates
+  posts     Post[]  
+  binding Binding[]                                 // A user can author many posts
+  createdAt DateTime   @default(now())               // Auto-generated timestamp
+  updatedAt DateTime   @updatedAt                    // Auto-updated timestamp
+}
+
+// ------------------------------------------------------
+// Template Model (Visual Blog Builder Layouts)
+// ------------------------------------------------------
+// Stores the drag-and-drop layout schemas designed by Admins
+model Template {
+  id          Int      @id @default(autoincrement())
+  name        String                                // Name of the layout (e.g., Default Single Post)
+  type        String                                // e.g., "single_post" or "archive"
+  category    String?                               // Optional: For category-specific layouts
+  status      String   @default("draft")            // "draft" or "published"
+  layoutJson  Json                                  // Storing the layout as structured JSON
+  authorId    Int                                   // Admin user who created it
+  author      User     @relation(fields: [authorId], references: [id])
+  version     Int      @default(1)                  // Layout version tracking
+  history     TemplateHistory[]                     // Previous versions of this layout
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ------------------------------------------------------
+// TemplateHistory Model (Versioning)
+// ------------------------------------------------------
+// Stores previous versions of templates allowing for rollback
 model TemplateHistory {
   id         Int      @id @default(autoincrement())
   templateId Int
@@ -34,27 +96,36 @@ model TemplateHistory {
 
 model Post {
   id              Int       @id @default(autoincrement())
-  title           String
-  slug            String    @unique
+  title           String    @db.VarChar(255)
+  slug            String    @unique @db.VarChar(255)
   excerpt         String?
-  content         String
-  status          String    @default("published")
-  authorId        Int
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  content         String    @map("body")
+  coverImage      String?   @map("featured_image") @db.VarChar(500)
+  category        String?   @db.VarChar(100)
   categories      String?
-  featured        Boolean   @default(false)
-  canonicalUrl    String?
-  coverImage      String?
-  keywords        String?
-  metaDescription String?
-  metaTitle       String?
-  structuredData  String?
-  category        String?
-  isPublished     Boolean   @default(false)
-  publishedAt     DateTime?
   tags            String[]
-  author          User      @relation(fields: [authorId], references: [id])
+  keywords        String?
+  metaTitle       String?
+  metaDescription String?
+  canonicalUrl    String?
+  structuredData  String?
+  isPublished     Boolean   @default(false)
+  publishedAt     DateTime? @map("published_date") @db.Timestamp(6)
+  status          String    @default("published") @db.VarChar(20)
+  featured        Boolean?  @default(false)
+  showToc         Boolean   @default(false)
+  allowComments   Boolean   @default(false)
+  authorId        Int?      @map("author_id")
+  createdAt       DateTime? @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt       DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  author          User?     @relation(fields: [authorId], references: [id])
+  comments        Comment[]
+
+  @@index([authorId], map: "idx_posts_author")
+  @@index([category], map: "idx_posts_category")
+  @@index([publishedAt], map: "idx_posts_published_date")
+  @@index([status], map: "idx_posts_status")
+  @@map("posts")
 }
 
 model Binding {
@@ -87,6 +158,19 @@ model Template {
   version    Int               @default(1)
   createdAt  DateTime          @default(now())
   updatedAt  DateTime
-  users      User              @relation(fields: [authorId], references: [id])
+  author     User              @relation(fields: [authorId], references: [id])
   history    TemplateHistory[]
+
+  @@map("templates")
 }
+
+// Allows each user/admin to have their own binding preferences
+model Binding {
+  id        String   @id @default(uuid())
+  mode      String
+  selected  Json
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  updatedAt DateTime @updatedAt
+}
+
