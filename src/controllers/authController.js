@@ -10,26 +10,42 @@ const register = async (req, res) => {
             return res.status(400).json({ error: 'Email and password are required' });
         }
 
+        // Email Format Validation (Regex)
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            return res.status(400).json({ error: 'Please enter a valid email address format.' });
+        }
+
         // Deep Email Validation (Check for typos, disposable emails, and MX records)
-        const validationResult = await validate.validate(email);
-        if (!validationResult.valid) {
-            let errorMessage = 'Please enter a valid email address.';
-            
-            const { validators } = validationResult;
-            
-            if (validators.typo && !validators.typo.valid && validators.typo.bestSuggestion) {
-                errorMessage = `Did you mean ${validators.typo.bestSuggestion}?`;
-            } else if (validators.mx && !validators.mx.valid) {
-                errorMessage = 'The email domain does not exist or cannot receive emails.';
-            } else if (validators.disposable && !validators.disposable.valid) {
-                errorMessage = 'Disposable email addresses are not allowed.';
-            } else if (validators.regex && !validators.regex.valid) {
-                errorMessage = 'Please enter a valid email address format.';
-            } else if (validators.smtp && !validators.smtp.valid) {
-                errorMessage = 'This email account does not appear to exist.';
+        // In local development, we don't want to block users due to offline/DNS/test domain issues,
+        // so we skip blocking on MX and SMTP validations unless running in production.
+        try {
+            const validationResult = await validate.validate(email);
+            if (!validationResult.valid) {
+                const { validators } = validationResult;
+                
+                if (validators.regex && !validators.regex.valid) {
+                    return res.status(400).json({ error: 'Please enter a valid email address format.' });
+                }
+                if (validators.disposable && !validators.disposable.valid) {
+                    return res.status(400).json({ error: 'Disposable email addresses are not allowed.' });
+                }
+                if (validators.typo && !validators.typo.valid && validators.typo.bestSuggestion) {
+                    return res.status(400).json({ error: `Did you mean ${validators.typo.bestSuggestion}?` });
+                }
+                
+                // For MX/SMTP, we only reject if NODE_ENV is 'production'
+                if (process.env.NODE_ENV === 'production') {
+                    if (validators.mx && !validators.mx.valid) {
+                        return res.status(400).json({ error: 'The email domain does not exist or cannot receive emails.' });
+                    }
+                    if (validators.smtp && !validators.smtp.valid) {
+                        return res.status(400).json({ error: 'This email account does not appear to exist.' });
+                    }
+                }
             }
-            
-            return res.status(400).json({ error: errorMessage });
+        } catch (validationError) {
+            console.warn('Deep email validation failed to execute:', validationError.message);
         }
 
         // Strong Password Validation
