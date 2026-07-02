@@ -2,12 +2,19 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
 async function main() {
-  const users = await prisma.user.findMany();
-  console.log('Users in DB:', users.map(u => ({ id: u.id, email: u.email, role: u.role })));
-  await prisma.$disconnect();
+  const userCount = await prisma.user.count();
+  console.log(`Total users in database: ${userCount}`);
+  const users = await prisma.user.findMany({
+    select: {
+      id: true,
+      email: true,
+      role: true,
+      isEmailVerified: true
+    }
+  });
+  console.log('Users in DB:', JSON.stringify(users, null, 2));
 }
 
-main().catch(e => {
-  console.error(e);
-  process.exit(1);
-});
+main()
+  .catch(e => console.error(e))
+  .finally(async () => await prisma.$disconnect());
