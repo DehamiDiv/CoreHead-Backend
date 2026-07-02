@@ -186,12 +186,34 @@ exports.getPostById = async (req, res) => {
 exports.getPostBySlug = async (req, res) => {
   try {
     const { slug } = req.params;
-    const post = await prisma.post.findUnique({
+    let post = await prisma.post.findUnique({
       where: { slug },
       include: {
         author: { select: { id: true, email: true } }
       }
     });
+
+    // Fallback: If not found, attempt to decode and normalize spaces/special characters to hyphens
+    if (!post && slug) {
+      try {
+        const decodedSlug = decodeURIComponent(slug);
+        const normalizedSlug = decodedSlug
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/(^-|-$)+/g, '');
+        
+        if (normalizedSlug && normalizedSlug !== slug) {
+          post = await prisma.post.findUnique({
+            where: { slug: normalizedSlug },
+            include: {
+              author: { select: { id: true, email: true } }
+            }
+          });
+        }
+      } catch (err) {
+        console.error('Error decoding/normalizing slug:', err);
+      }
+    }
 
     if (!post) {
       return res.status(404).json({ error: 'Post not found.' });
