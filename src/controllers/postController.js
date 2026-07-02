@@ -126,7 +126,7 @@ exports.getPosts = async (req, res) => {
     }
 
     // Filter by user unless admin
-    if (userRole !== 'admin') {
+    if (userRole?.toLowerCase() !== 'admin') {
       where.authorId = userId;
     }
 
@@ -170,7 +170,7 @@ exports.getPostById = async (req, res) => {
     }
 
     // Ownership check
-    if (userRole !== 'admin' && post.authorId !== userId) {
+    if (userRole?.toLowerCase() !== 'admin' && post.authorId !== userId) {
       return res.status(403).json({ error: 'Access denied. This post does not belong to you.' });
     }
 
@@ -235,7 +235,7 @@ exports.updatePost = async (req, res) => {
 
     if (!existingPost) return res.status(404).json({ error: 'Post not found.' });
 
-    if (userRole !== 'admin' && existingPost.authorId !== userId) {
+    if (userRole?.toLowerCase() !== 'admin' && existingPost.authorId !== userId) {
       return res.status(403).json({ error: 'Access denied. You can only update your own posts.' });
     }
 
@@ -283,7 +283,7 @@ exports.deletePost = async (req, res) => {
 
     if (!existingPost) return res.status(404).json({ error: 'Post not found.' });
 
-    if (userRole !== 'admin' && existingPost.authorId !== userId) {
+    if (userRole?.toLowerCase() !== 'admin' && existingPost.authorId !== userId) {
       return res.status(403).json({ error: 'Access denied. You can only delete your own posts.' });
     }
 
