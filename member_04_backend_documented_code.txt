@@ -1,0 +1,108 @@
+/* ==========================================================================
+   MEMBER 04 - BACKEND CONTRIBUTION DOCUMENTATION
+   CoreHead AI CMS Project
+   ========================================================================== */
+
+// 1. INTEGRATED LLM API FOR AI-BASED LAYOUT GENERATION
+// Location: src/services/aiService.js
+const { Groq } = require('groq-sdk');
+const { randomUUID } = require('crypto');
+
+let groqClient = null;
+const getGroqClient = () => {
+  if (!groqClient && process.env.GROQ_API_KEY) {
+    try {
+      groqClient = new Groq({ apiKey: process.env.GROQ_API_KEY });
+    } catch (err) {
+      console.error('[Groq Client Init Error]', err.message);
+    }
+  }
+  return groqClient;
+};
+
+
+// 2. DEVELOPED /ai/generate-layout ENDPOINT & 5. SECURITY VALIDATION
+// Location: src/routes/aiRoutes.js
+const express = require('express');
+const router = express.Router();
+const rateLimit = require('express-rate-limit');
+
+const aiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 mins
+  max: 10, // Limit each IP to 10 requests per window
+  message: { error: 'Too many AI requests, please try again later.' }
+});
+
+router.post('/generate-layout', aiLimiter, async (req, res) => {
+  const { prompt } = req.body;
+
+  // Security: Prompt sanitization & Length validation
+  if (!prompt || prompt.trim().length < 5) {
+    return res.status(400).json({ error: 'Invalid prompt length' });
+  }
+  if (prompt.toLowerCase().includes('<script>')) {
+    return res.status(400).json({ error: 'Script injection detected' });
+  }
+
+  const result = await aiService.generateLayout(prompt.trim());
+  res.json({ success: true, ...result });
+});
+
+
+// 3. IMPLEMENTED STRICT JSON SCHEMA VALIDATION
+// Location: src/services/aiService.js
+const { z } = require('zod');
+
+const layoutSchema = z.object({
+  blocks: z.array(z.object({
+    id: z.string().optional(),
+    type: z.enum(['Heading', 'Paragraph', 'Image', 'Quote', 'Divider', 'Button', 'Collection List']),
+    content: z.any(),
+    styles: z.any().optional()
+  }))
+});
+
+// Inside generateLayout:
+const validation = layoutSchema.safeParse(parsedResult);
+if (!validation.success) {
+  console.error('[Validation Error]', validation.error.format());
+  throw new Error('AI Response Validation Failed');
+}
+
+
+// 4. IMPLEMENTED BLOG LOOP QUERY HANDLER (Latest posts, Category filter)
+// Location: src/controllers/postController.js
+exports.getPosts = async (req, res) => {
+  try {
+    const { category, limit } = req.query;
+
+    const queryOptions = {
+      take: parseInt(limit) || 10,
+      orderBy: { created_at: 'desc' },
+      where: category ? { category: category } : {}
+    };
+
+    const posts = await prisma.posts.findMany(queryOptions);
+    res.json({ success: true, posts });
+  } catch (error) {
+    console.error('[Post Fetch Error]', error.message);
+    res.status(500).json({ error: 'Failed to fetch posts' });
+  }
+};
+
+
+// 5. ADDED ERROR HANDLING AND SECURITY VALIDATION (Centralized logging)
+// Location: src/services/aiService.js (Catch block)
+/*
+try {
+  // AI generation logic...
+} catch (error) {
+  console.error('[AI Service Error]', {
+    message: error.message,
+    timestamp: new Date().toISOString(),
+    stack: error.stack
+  });
+  // Rule-based fallback ensures system remains operational
+  return { blocks: generateRuleBasedLayout(prompt), isFallback: true };
+}
+*/

@@ -104,4 +104,82 @@ router.get('/history', authMiddleware, async (req, res) => {
   }
 });
 
+// ─── DELETE /api/ai/history/:id ───────────────────────────────
+router.delete('/history/:id', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const layout = await prisma.ai_layouts.findUnique({
+      where: { id: parseInt(id) }
+    });
+
+    if (!layout) {
+      return res.status(404).json({ error: 'History not found' });
+    }
+
+    if (layout.user_id !== req.user.id) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+
+    await prisma.ai_layouts.delete({
+      where: { id: parseInt(id) }
+    });
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting AI history:', error);
+    return res.status(500).json({ error: 'Failed to delete AI history' });
+  }
+});
+
+// ─── POST /api/ai/generate-blog ──────────────────────────────
+router.post('/generate-blog', authMiddleware, aiLimiter, async (req, res) => {
+  try {
+    const { topic, tone, keywords, wordCount } = req.body;
+
+    if (!topic || typeof topic !== 'string' || topic.trim().length < 5) {
+      return res.status(400).json({ error: 'Invalid topic. Please describe your topic in at least 5 characters.' });
+    }
+
+    if (topic.length > 500) {
+      return res.status(400).json({ error: 'Topic too long (max 500 characters allowed).' });
+    }
+
+    const result = await aiService.generateBlogContent({ topic, tone, keywords, wordCount });
+    return res.json(result);
+
+  } catch (error) {
+    console.error('AI generate-blog error:', error);
+    return res.status(500).json({
+      error: 'Failed to generate blog content.',
+      message: error.message,
+    });
+  }
+});
+
+// ─── POST /api/ai/modify-layout ──────────────────────────────
+router.post('/modify-layout', authMiddleware, aiLimiter, async (req, res) => {
+  try {
+    const { currentBlocks, instruction } = req.body;
+
+    if (!currentBlocks || !Array.isArray(currentBlocks)) {
+      return res.status(400).json({ error: 'Invalid currentBlocks data. Must be an array.' });
+    }
+
+    if (!instruction || typeof instruction !== 'string' || instruction.trim().length < 3) {
+      return res.status(400).json({ error: 'Invalid instruction. Must be at least 3 characters.' });
+    }
+
+    const result = await aiService.modifyLayout(currentBlocks, instruction.trim());
+    return res.json({ success: true, blocks: result.blocks });
+
+  } catch (error) {
+    console.error('AI modify-layout error:', error);
+    return res.status(500).json({
+      error: 'Failed to modify layout.',
+      message: error.message,
+    });
+  }
+});
+
 module.exports = router;
