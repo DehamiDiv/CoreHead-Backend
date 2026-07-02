@@ -27,6 +27,7 @@ const registerUser = async (email, password, name) => {
     });
 
     // 5. Send verification email with OTP
+    console.log(`[AUTH] Verification OTP for ${email}: ${otp}`);
     try {
         await emailService.sendEmail({
             to: email,
