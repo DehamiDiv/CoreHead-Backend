@@ -50,7 +50,7 @@ app.get('/api/preview/posts', async (req, res) => {
     // ✅ Uses the 'Post' model (maps to Post table via User relation)
     const posts = await prisma.post.findMany({
       take: limit,
-      where: { status: 'published' },
+      where: { status: 'Published' },
       orderBy: { createdAt: 'desc' },
       select: {
         id:         true,
@@ -120,8 +120,3 @@ app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
 });
 
-
-// Register binding-related API routes under the "/api" base path
-const bindingRoutes = require("./routes/bindingRoutes");
-
-app.use("/api", bindingRoutes);

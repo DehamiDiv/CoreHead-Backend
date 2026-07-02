@@ -3,6 +3,10 @@ const router = express.Router();
 const postController = require('../controllers/postController');
 const authMiddleware = require('../middlewares/authMiddleware');
 
+// PUBLIC ROUTES (No Auth Required)
+// GET /api/posts/slug/:slug  ← must be before /:id
+router.get('/slug/:slug', postController.getPostBySlug);
+
 // PROTECTED ROUTES (Management)
 router.use(authMiddleware);
 
@@ -11,9 +15,6 @@ router.post('/', postController.createPost);
 
 // GET /api/posts
 router.get('/', postController.getPosts);
-
-// GET /api/posts/slug/:slug  ← must be before /:id
-router.get('/slug/:slug', postController.getPostBySlug);
 
 // GET /api/posts/:id
 router.get('/:id', postController.getPostById);
