@@ -1,0 +1,178 @@
+Member 04 – Backend Contribution Code
+
+This file contains the backend implementation for AI layout generation, 
+Zod schema validation, and Blog Loop query handlers.
+
+==================================================
+FILE 1: aiRoutes.js
+Path: src/routes/aiRoutes.js
+==================================================
+const express = require('express');
+const router = express.Router();
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
+const authMiddleware = require('../middlewares/authMiddleware');
+const aiService = require('../services/aiService');
+const rateLimit = require('express-rate-limit');
+
+const aiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { error: 'Too many requests from this IP, please try again after 15 minutes.' },
+});
+
+router.post('/generate-layout', authMiddleware, aiLimiter, async (req, res) => {
+  try {
+    const { prompt } = req.body;
+    if (!prompt || typeof prompt !== 'string' || prompt.trim().length < 5) {
+      return res.status(400).json({ error: 'Invalid prompt. Min 5 characters.' });
+    }
+
+    const result = await aiService.generateLayout(prompt.trim());
+    
+    let saved;
+    try {
+      saved = await prisma.ai_layouts.create({
+        data: {
+          user_id: req.user.id,
+          prompt,
+          layout_type: 'blog-archive',
+          generated_layout: { blocks: result.blocks },
+        },
+      });
+    } catch (dbErr) { console.warn('DB save failed:', dbErr.message); }
+
+    return res.json({ success: true, blocks: result.blocks, id: saved?.id, isFallback: result.isFallback });
+  } catch (error) {
+    return res.status(500).json({ error: 'Failed to generate layout.', message: error.message });
+  }
+});
+
+router.get('/history', authMiddleware, async (req, res) => {
+  const layouts = await prisma.ai_layouts.findMany({ where: { user_id: req.user.id }, take: 20, orderBy: { created_at: 'desc' } });
+  return res.json({ success: true, layouts });
+});
+
+module.exports = router;
+
+==================================================
+FILE 2: aiService.js
+Path: src/services/aiService.js
+==================================================
+const { Groq } = require('groq-sdk');
+const { z } = require('zod');
+const { randomUUID } = require('crypto');
+
+const aiService = {
+  async generateLayout(prompt) {
+    const GROQ_API_KEY = process.env.GROQ_API_KEY;
+    const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.1-8b-instant';
+
+    if (!GROQ_API_KEY) return { blocks: this.generateFallback(prompt), isFallback: true };
+
+    const groq = new Groq({ apiKey: GROQ_API_KEY });
+    const systemPrompt = `Generate a JSON object with a "blocks" array for a CMS layout. Schema: { id, type, content, styles }. Types: Heading, Paragraph, Image, Quote, Divider, Button, Collection List.`;
+
+    try {
+      const chat = await groq.chat.completions.create({
+        messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: prompt }],
+        model: GROQ_MODEL,
+        response_format: { type: "json_object" }
+      });
+
+      const parsedResult = JSON.parse(chat.choices[0].message.content);
+
+      // Strict JSON schema validation using Zod
+      const layoutSchema = z.object({
+        blocks: z.array(z.object({
+          id: z.string().optional(),
+          type: z.enum(['Heading', 'Paragraph', 'Image', 'Quote', 'Divider', 'Button', 'Collection List']),
+          content: z.any(),
+          styles: z.any().optional()
+        }))
+      });
+
+      const validation = layoutSchema.safeParse(parsedResult);
+      if (!validation.success) throw new Error('Schema validation failed');
+
+      return { blocks: validation.data.blocks, isFallback: false };
+    } catch (err) {
+      return { blocks: this.generateFallback(prompt), isFallback: true };
+    }
+  },
+
+  generateFallback(prompt) {
+    return [
+      { id: randomUUID(), type: 'Heading', content: 'Fallback Layout', styles: { textAlign: 'center' } },
+      { id: randomUUID(), type: 'Collection List', content: { limit: 6 }, styles: {} }
+    ];
+  }
+};
+
+module.exports = aiService;
+
+==================================================
+FILE 3: blogRoutes.js
+Path: src/routes/blogRoutes.js
+==================================================
+const { Router } = require('express');
+const blogController = require('../controllers/blogController');
+const router = Router();
+
+router.get('/layout/:slug', blogController.getPublicLayout);
+router.get('/posts/preview', blogController.getPreviewPosts);
+router.get('/posts/:slug', blogController.getPostBySlug);
+
+module.exports = router;
+
+==================================================
+FILE 4: blogController.js
+Path: src/controllers/blogController.js
+==================================================
+const blogService = require('../services/blogService');
+
+const getPublicLayout = async (req, res) => {
+  const layout = await blogService.getPublicLayout(req.params.slug);
+  return res.json(layout);
+};
+
+const getPreviewPosts = async (req, res) => {
+  const { limit = 6, offset = 0 } = req.query;
+  const result = await blogService.getPreviewPosts(limit, offset);
+  return res.json(result);
+};
+
+const getPostBySlug = async (req, res) => {
+  const post = await blogService.getPostBySlug(req.params.slug);
+  return res.json(post);
+};
+
+module.exports = { getPublicLayout, getPreviewPosts, getPostBySlug };
+
+==================================================
+FILE 5: blogService.js
+Path: src/services/blogService.js
+==================================================
+const blogRepository = require('../repositories/blogRepository');
+
+const getPreviewPosts = async (limit = 6, offset = 0) => {
+  const [posts, total] = await Promise.all([
+    blogRepository.getPreviewPosts(limit, offset),
+    blogRepository.countPublishedPosts(),
+  ]);
+  return { posts, meta: { total, limit, offset, hasMore: offset + limit < total } };
+};
+
+const getPostBySlug = async (slug) => {
+  const post = await blogRepository.getPostBySlug(slug);
+  if (!post) throw new Error('Post not found');
+  return post;
+};
+
+const getPublicLayout = async (slug) => {
+  const layout = await blogRepository.getPublicLayout(slug);
+  if (!layout) throw new Error('Layout not found');
+  return layout;
+};
+
+module.exports = { getPreviewPosts, getPostBySlug, getPublicLayout };
