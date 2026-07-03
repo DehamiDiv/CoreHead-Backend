@@ -20,7 +20,7 @@ const aiLimiter = rateLimit({
 // Takes a user prompt and returns an array of BuilderBlocks
 router.post('/generate-layout', authMiddleware, aiLimiter, async (req, res) => {
   try {
-    const { prompt } = req.body;
+    const { prompt, layoutType, designStyle, features } = req.body;
 
     if (!prompt || typeof prompt !== 'string' || prompt.trim().length < 5) {
       return res.status(400).json({ error: 'Invalid prompt. Please enter at least 5 characters.' });
@@ -62,9 +62,9 @@ router.post('/generate-layout', authMiddleware, aiLimiter, async (req, res) => {
         data: {
           user_id: req.user.id,
           prompt,
-          layout_type: 'blog-archive',
-          design_style: 'modern',
-          features: {},
+          layout_type: layoutType || 'blog-archive',
+          design_style: designStyle || 'modern',
+          features: features || {},
           generated_layout: { blocks },
         },
       });
@@ -72,8 +72,8 @@ router.post('/generate-layout', authMiddleware, aiLimiter, async (req, res) => {
       console.warn('AI layout DB save failed:', dbErr.message);
     }
 
-    return res.json({ 
-      success: true, 
+    return res.json({
+      success: true,
       blocks,
       id: saved ? saved.id : null,
       isFallback
@@ -108,7 +108,7 @@ router.get('/history', authMiddleware, async (req, res) => {
 router.delete('/history/:id', authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     const layout = await prisma.ai_layouts.findUnique({
       where: { id: parseInt(id) }
     });
@@ -131,6 +131,41 @@ router.delete('/history/:id', authMiddleware, async (req, res) => {
     return res.status(500).json({ error: 'Failed to delete AI history' });
   }
 });
+
+// ─── PUT /api/ai/history/:id ──────────────────────────────────
+router.put('/history/:id', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { prompt } = req.body;
+
+    if (!prompt || typeof prompt !== 'string' || prompt.trim().length < 3) {
+      return res.status(400).json({ error: 'Prompt must be at least 3 characters long.' });
+    }
+
+    const layout = await prisma.ai_layouts.findUnique({
+      where: { id: parseInt(id) }
+    });
+
+    if (!layout) {
+      return res.status(404).json({ error: 'History not found' });
+    }
+
+    if (layout.user_id !== req.user.id) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+
+    const updated = await prisma.ai_layouts.update({
+      where: { id: parseInt(id) },
+      data: { prompt: prompt.trim() }
+    });
+
+    return res.json({ success: true, layout: updated });
+  } catch (error) {
+    console.error('Error updating AI history:', error);
+    return res.status(500).json({ error: 'Failed to update AI history' });
+  }
+});
+
 
 // ─── POST /api/ai/generate-blog ──────────────────────────────
 router.post('/generate-blog', authMiddleware, aiLimiter, async (req, res) => {
@@ -177,6 +212,31 @@ router.post('/modify-layout', authMiddleware, aiLimiter, async (req, res) => {
     console.error('AI modify-layout error:', error);
     return res.status(500).json({
       error: 'Failed to modify layout.',
+      message: error.message,
+    });
+  }
+});
+
+// ─── POST /api/ai/refine ──────────────────────────────────────
+router.post('/refine', authMiddleware, aiLimiter, async (req, res) => {
+  try {
+    const { content, action } = req.body;
+
+    if (!content || typeof content !== 'string') {
+      return res.status(400).json({ error: 'Content is required.' });
+    }
+
+    if (!action || !['grammar', 'longer', 'summarize'].includes(action)) {
+      return res.status(400).json({ error: 'Invalid action type.' });
+    }
+
+    const refined = await aiService.refineContent(content, action);
+    return res.json({ success: true, refined });
+
+  } catch (error) {
+    console.error('AI refine content error:', error);
+    return res.status(500).json({
+      error: 'Failed to refine content.',
       message: error.message,
     });
   }

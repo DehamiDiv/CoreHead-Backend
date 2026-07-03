@@ -174,7 +174,7 @@ User prompt: "${prompt}"
       }
 
       const text = chatCompletion.choices[0].message?.content || '{}';
-      
+
       let parsedResult;
       try {
         parsedResult = JSON.parse(text);
@@ -285,7 +285,7 @@ Target Word Count: ${wordCount || '1000 words'}.
       console.log('--- RAW GROQ AI RESPONSE ---');
       console.log(text);
       console.log('----------------------------');
-      
+
       let parsedResult;
       try {
         parsedResult = JSON.parse(text);
@@ -309,9 +309,9 @@ Target Word Count: ${wordCount || '1000 words'}.
       const title = findKey(parsedResult, ['title', 'postTitle', 'blogTitle', 'headline', 'subject']);
       const content = findKey(parsedResult, ['content', 'body', 'markdown', 'postContent', 'text']);
       const excerpt = findKey(parsedResult, ['excerpt', 'summary', 'description', 'teaser']) || '';
-      
+
       let seo = findKey(parsedResult, ['seo', 'seoMetadata', 'metadata', 'seo_metadata', 'seoDetails']);
-      
+
       let finalSeo = {
         metaTitle: '',
         metaDescription: '',
@@ -418,7 +418,7 @@ User Instruction:
       }
 
       const text = chatCompletion.choices[0].message?.content || '{}';
-      
+
       let parsedResult;
       try {
         parsedResult = JSON.parse(text);
@@ -468,7 +468,7 @@ User Instruction:
   modifyFallback(currentBlocks, instruction) {
     const lower = instruction.toLowerCase();
     const id = () => randomUUID();
-    
+
     if (lower.includes('add') || lower.includes('insert') || lower.includes('create') || lower.includes('new')) {
       return [
         ...currentBlocks,
@@ -482,13 +482,13 @@ User Instruction:
         }
       ];
     }
-    
+
     if (lower.includes('delete') || lower.includes('remove')) {
       if (currentBlocks.length > 1) {
         return currentBlocks.slice(0, -1);
       }
     }
-    
+
     return [
       ...currentBlocks,
       {
@@ -498,6 +498,56 @@ User Instruction:
         styles: { textAlign: 'center', color: '#4f46e5', marginTop: '20px' }
       }
     ];
+  },
+
+  async refineContent(content, action) {
+    const GROQ_API_KEY = process.env.GROQ_API_KEY;
+    const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.1-8b-instant';
+
+    if (!GROQ_API_KEY) {
+      throw new Error('GROQ_API_KEY is not configured in backend environment variables.');
+    }
+
+    const groq = getGroqClient();
+    if (!groq) {
+      throw new Error('Groq client could not be initialized. Please check backend config.');
+    }
+
+    let instructionPrompt = "";
+    if (action === "grammar") {
+      instructionPrompt = "Fix spelling, grammar, punctuation, and typographical mistakes. Keep the HTML or content structure identical, but output polished text.";
+    } else if (action === "longer") {
+      instructionPrompt = "Expand on the ideas of the post. Elaborate on the details and enrich the content, making it twice as long. Maintain the style and tone.";
+    } else if (action === "summarize") {
+      instructionPrompt = "Condense the content down to its main points. Summarize the content concisely, making it shorter and punchy.";
+    }
+
+    const systemPrompt = `
+You are an expert editor. You will receive content, perform the requested edit action, and return the modified content ONLY.
+Rules:
+- Output only the updated content text. Do not wrap in markdown code blocks, do not explain the changes, do not write 'Here is your text:'.
+- Maintain any HTML formatting (like <p>, <h1>, <strong>, <ul>, etc.) present in the input. If the input contains HTML tags, make sure they remain valid and well-formed.
+`;
+
+    try {
+      const chatCompletion = await groq.chat.completions.create({
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `Action: ${instructionPrompt}\n\nInput Content:\n${content}` }
+        ],
+        model: GROQ_MODEL,
+        temperature: 0.3,
+      });
+
+      const refined = chatCompletion.choices[0]?.message?.content?.trim();
+      if (!refined) {
+        throw new Error('AI returned an empty response.');
+      }
+      return refined;
+    } catch (error) {
+      console.error('LLM refining failed:', error);
+      throw error;
+    }
   }
 };
 
