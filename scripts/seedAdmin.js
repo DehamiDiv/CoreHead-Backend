@@ -3,44 +3,41 @@ const bcrypt = require('bcryptjs');
 
 const prisma = new PrismaClient();
 
-async function main() {
-  const email = 'dehamidivyanjali166@gmail.com';
-  const password = 'Admin@1234'; // Change this to your desired password
-  const role = 'admin';
-
+async function seedAdminUser(email, password) {
   // Check if user already exists
   const existing = await prisma.user.findUnique({ where: { email } });
 
+  const salt = await bcrypt.genSalt(10);
+  const hashedPassword = await bcrypt.hash(password, salt);
+
   if (existing) {
     console.log(`User already exists: ${existing.email} | Role: ${existing.role}`);
-    if (existing.role !== 'admin') {
-      const updated = await prisma.user.update({
-        where: { email },
-        data: { role: 'admin' },
-      });
-      console.log(`Role updated to admin for: ${updated.email}`);
-    } else {
-      console.log('User is already an admin. Nothing to do.');
-    }
-    return;
+    const updated = await prisma.user.update({
+      where: { email },
+      data: {
+        password: hashedPassword,
+        role: 'admin',
+        isEmailVerified: true
+      },
+    });
+    console.log(`Updated admin details for: ${updated.email}`);
+  } else {
+    console.log(`Creating new Admin user: ${email}...`);
+    const user = await prisma.user.create({
+      data: {
+        email,
+        password: hashedPassword,
+        role: 'admin',
+        isEmailVerified: true
+      },
+    });
+    console.log(`✅ Admin user created successfully: ${user.email}`);
   }
+}
 
-  // Hash the password
-  const hashedPassword = await bcrypt.hash(password, 10);
-
-  // Create the admin user
-  const user = await prisma.user.create({
-    data: {
-      email,
-      password: hashedPassword,
-      role,
-    },
-  });
-
-  console.log(`✅ Admin user created successfully!`);
-  console.log(`   Email   : ${user.email}`);
-  console.log(`   Role    : ${user.role}`);
-  console.log(`   Password: ${password}  ← save this, it won't be shown again`);
+async function main() {
+  await seedAdminUser('dehamidivyanjali166@gmail.com', 'Admin@1234');
+  await seedAdminUser('admin@corehead.com', 'Admin@CoreHead2026');
 }
 
 main()

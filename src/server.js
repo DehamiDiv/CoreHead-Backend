@@ -49,7 +49,7 @@ app.get('/api/preview/posts', async (req, res) => {
 
     const posts = await prisma.post.findMany({
       take: limit,
-      where: { status: 'published' },
+      where: { status: 'Published' },
       orderBy: { createdAt: 'desc' },
       select: {
         id:         true,
@@ -117,5 +117,6 @@ app.use('/api/comments',  commentRoutes);
 
 // ── Start Server ──
 app.listen(PORT, () => {
-  console.log(`🚀 Server is running on http://localhost:${PORT} `);
+  console.log(`Server is running on http://localhost:${PORT}`);
 });
+

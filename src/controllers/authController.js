@@ -1,8 +1,9 @@
 const authService = require('../services/authService');
+const validate = require('deep-email-validator');
 
 const register = async (req, res) => {
     try {
-        const { email, password } = req.body;
+        const { email, password, name } = req.body;
 
         // Basic presence validation
         if (!email || !password) {
@@ -12,15 +13,42 @@ const register = async (req, res) => {
         // Email Format Validation (Regex)
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(email)) {
-            return res.status(400).json({ error: 'Invalid email format' });
+            return res.status(400).json({ error: 'Please enter a valid email address format.' });
+        }
+
+        // Deep Email Validation (Check for typos, disposable emails, and MX records)
+        // In local development, we don't want to block users due to offline/DNS/test domain issues,
+        // so we skip blocking on MX and SMTP validations unless running in production.
+        try {
+            const validationResult = await validate.validate(email);
+            if (!validationResult.valid) {
+                const { validators } = validationResult;
+                
+                if (validators.regex && !validators.regex.valid) {
+                    return res.status(400).json({ error: 'Please enter a valid email address format.' });
+                }
+                if (validators.disposable && !validators.disposable.valid) {
+                    return res.status(400).json({ error: 'Disposable email addresses are not allowed.' });
+                }
+                if (validators.typo && !validators.typo.valid && validators.typo.bestSuggestion) {
+                    return res.status(400).json({ error: `Did you mean ${validators.typo.bestSuggestion}?` });
+                }
+                
+                // For MX/SMTP, we only reject if NODE_ENV is 'production'
+                if (process.env.NODE_ENV === 'production') {
+                    if (validators.mx && !validators.mx.valid) {
+                        return res.status(400).json({ error: 'The email domain does not exist or cannot receive emails.' });
+                    }
+                    if (validators.smtp && !validators.smtp.valid) {
+                        return res.status(400).json({ error: 'This email account does not appear to exist.' });
+                    }
+                }
+            }
+        } catch (validationError) {
+            console.warn('Deep email validation failed to execute:', validationError.message);
         }
 
         // Strong Password Validation
-        // - At least 8 characters
-        // - At least one uppercase letter
-        // - At least one lowercase letter
-        // - At least one number
-        // - At least one special character
         const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
         if (!passwordRegex.test(password)) {
             return res.status(400).json({ 
@@ -28,11 +56,11 @@ const register = async (req, res) => {
             });
         }
 
-        const newUser = await authService.registerUser(email, password);
+        const newUser = await authService.registerUser(email, password, name);
 
         res.status(201).json({
             message: 'User registered successfully',
-            user: { id: newUser.id, email: newUser.email }
+            user: { id: newUser.id, email: newUser.email, name: newUser.name }
         });
     } catch (error) {
         res.status(400).json({ error: error.message });
@@ -49,8 +77,6 @@ const login = async (req, res) => {
 
         const { user, accessToken, refreshToken } = await authService.loginUser(email, password);
 
-        // The login response now includes the 'role' field.
-        // This is crucial for the frontend to know if it should redirect to the /admin dashboard.
         res.status(200).json({
             message: 'Login successful',
             accessToken,
@@ -64,7 +90,21 @@ const login = async (req, res) => {
             }
         });
     } catch (error) {
-        // 401 Unauthorized for invalid credentials
+        res.status(401).json({ error: error.message });
+    }
+};
+
+const refreshToken = async (req, res) => {
+    try {
+        const { refreshToken } = req.body;
+        if (!refreshToken) {
+            return res.status(400).json({ error: 'Refresh token is required' });
+        }
+
+        const { accessToken } = await authService.refreshAccessToken(refreshToken);
+
+        res.status(200).json({ accessToken });
+    } catch (error) {
         res.status(401).json({ error: error.message });
     }
 };
@@ -99,28 +139,54 @@ const getAllUsers = async (req, res) => {
     }
 };
 
-const refreshToken = async (req, res) => {
+const forgotPassword = async (req, res) => {
     try {
-        const { refreshToken } = req.body;
-        if (!refreshToken) {
-            return res.status(400).json({ error: 'Refresh token is required' });
+        const { email } = req.body;
+        if (!email) {
+            return res.status(400).json({ error: 'Please provide an email address' });
         }
 
-        const decoded = require('jsonwebtoken').verify(
-            refreshToken,
-            process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET || 'corehead_refresh_secret_key_123'
-        );
+        await authService.requestPasswordReset(email);
 
-        // Issue a new access token
-        const accessToken = require('jsonwebtoken').sign(
-            { id: decoded.id, email: decoded.email, role: decoded.role },
-            process.env.JWT_SECRET || 'corehead_secret_key_123',
-            { expiresIn: '1d' }
-        );
-
-        res.status(200).json({ accessToken });
+        res.status(200).json({
+            message: 'Token sent to email!'
+        });
     } catch (error) {
-        res.status(401).json({ error: 'Invalid or expired refresh token' });
+        res.status(400).json({ error: error.message });
+    }
+};
+
+const resetPassword = async (req, res) => {
+    try {
+        const { token, password } = req.body;
+        if (!token || !password) {
+            return res.status(400).json({ error: 'Token and password are required' });
+        }
+
+        await authService.resetPassword(token, password);
+
+        res.status(200).json({
+            message: 'Password reset successful!'
+        });
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+    }
+};
+
+const verifyEmail = async (req, res) => {
+    try {
+        const { email, otp } = req.body;
+        if (!email || !otp) {
+            return res.status(400).json({ error: 'Email and OTP are required' });
+        }
+
+        await authService.verifyEmail(email, otp);
+
+        res.status(200).json({
+            message: 'Email verified successfully! You can now log in.'
+        });
+    } catch (error) {
+        res.status(400).json({ error: error.message });
     }
 };
 
@@ -128,6 +194,9 @@ module.exports = {
     register,
     login,
     refreshToken,
+    verifyEmail,
     getCurrentUser,
-    getAllUsers
+    getAllUsers,
+    forgotPassword,
+    resetPassword
 };

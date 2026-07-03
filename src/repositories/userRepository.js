@@ -1,11 +1,8 @@
 const prisma = require('../models/prismaClient');
 
-const createUser = async (email, password) => {
+const createUser = async (data) => {
     return await prisma.user.create({
-        data: {
-            email,
-            password
-        }
+        data
     });
 };
 
@@ -15,19 +12,47 @@ const findUserByEmail = async (email) => {
     });
 };
 
-const findUserById = async (id) => {
-    return await prisma.user.findUnique({
-        where: { id: parseInt(id) }
-    });
-};
-
 const findAllUsers = async () => {
     return await prisma.user.findMany({
         select: {
             id: true,
             email: true,
             name: true,
-            role: true
+            role: true,
+            createdAt: true
+        },
+        orderBy: {
+            createdAt: 'desc'
+        }
+    });
+};
+
+const findUserById = async (id) => {
+    return await prisma.user.findUnique({
+        where: { id: parseInt(id) }
+    });
+};
+
+const updateUser = async (id, data) => {
+    return await prisma.user.update({
+        where: { id: parseInt(id) },
+        data
+    });
+};
+
+const deleteUser = async (id) => {
+    return await prisma.user.delete({
+        where: { id: parseInt(id) }
+    });
+};
+
+const findUserByResetToken = async (token) => {
+    return await prisma.user.findFirst({
+        where: {
+            resetPasswordToken: token,
+            resetPasswordExpires: {
+                gt: new Date() // Token must be greater than current time
+            }
         }
     });
 };
@@ -35,6 +60,9 @@ const findAllUsers = async () => {
 module.exports = {
     createUser,
     findUserByEmail,
+    findAllUsers,
     findUserById,
-    findAllUsers
+    updateUser,
+    deleteUser,
+    findUserByResetToken
 };

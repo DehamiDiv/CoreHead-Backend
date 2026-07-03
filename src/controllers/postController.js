@@ -97,7 +97,7 @@ exports.createPost = async (req, res) => {
         publishedAt:     published_date ? new Date(published_date) : new Date(),
       },
       include: {
-        author: { select: { id: true, email: true, name: true } }
+        author: { select: { id: true, email: true } }
       }
     });
 
@@ -111,10 +111,12 @@ exports.createPost = async (req, res) => {
   }
 };
 
-// Get all posts
+// Get all posts (filtered by user unless admin)
 exports.getPosts = async (req, res) => {
   try {
     const { category, limit, status } = req.query;
+    const userId = req.user.id;
+    const userRole = req.user.role;
     
     const where = {};
     if (category) where.category = category;
@@ -123,11 +125,16 @@ exports.getPosts = async (req, res) => {
       where.featured = req.query.featured === 'true';
     }
 
+    // Filter by user unless admin
+    if (userRole?.toLowerCase() !== 'admin') {
+      where.authorId = userId;
+    }
+
     const posts = await prisma.post.findMany({
       where,
       include: {
         author: {
-          select: { id: true, email: true, name: true }
+          select: { id: true, email: true }
         }
       },
       take: limit ? parseInt(limit, 10) : undefined,
@@ -148,10 +155,13 @@ exports.getPosts = async (req, res) => {
 exports.getPostById = async (req, res) => {
   try {
     const { id } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
     const post = await prisma.post.findUnique({
       where: { id: parseInt(id, 10) },
       include: {
-        author: { select: { id: true, email: true, name: true } }
+        author: { select: { id: true, email: true } }
       }
     });
 
@@ -159,7 +169,13 @@ exports.getPostById = async (req, res) => {
       return res.status(404).json({ error: 'Post not found.' });
     }
 
-    res.status(200).json(formatPostData(post));
+    // Ownership check
+    if (userRole?.toLowerCase() !== 'admin' && post.authorId !== userId) {
+      return res.status(403).json({ error: 'Access denied. This post does not belong to you.' });
+    }
+
+    const formattedPost = formatPostData(post);
+    res.status(200).json(formattedPost);
   } catch (error) {
     console.error('Error fetching post:', error);
     res.status(500).json({ error: 'Failed to fetch post.', message: error.message });
@@ -170,12 +186,34 @@ exports.getPostById = async (req, res) => {
 exports.getPostBySlug = async (req, res) => {
   try {
     const { slug } = req.params;
-    const post = await prisma.post.findUnique({
+    let post = await prisma.post.findUnique({
       where: { slug },
       include: {
-        author: { select: { id: true, email: true, name: true } }
+        author: { select: { id: true, email: true } }
       }
     });
+
+    // Fallback: If not found, attempt to decode and normalize spaces/special characters to hyphens
+    if (!post && slug) {
+      try {
+        const decodedSlug = decodeURIComponent(slug);
+        const normalizedSlug = decodedSlug
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/(^-|-$)+/g, '');
+        
+        if (normalizedSlug && normalizedSlug !== slug) {
+          post = await prisma.post.findUnique({
+            where: { slug: normalizedSlug },
+            include: {
+              author: { select: { id: true, email: true } }
+            }
+          });
+        }
+      } catch (err) {
+        console.error('Error decoding/normalizing slug:', err);
+      }
+    }
 
     if (!post) {
       return res.status(404).json({ error: 'Post not found.' });
@@ -207,8 +245,21 @@ exports.updatePost = async (req, res) => {
       showToc,
       allowComments
     } = req.body;
+    const userId = req.user.id;
+    const userRole = req.user.role;
 
     const finalCategory = category || (Array.isArray(categories) && categories.length > 0 ? categories[0] : undefined);
+
+    // Check existence and ownership first
+    const existingPost = await prisma.post.findUnique({
+      where: { id: parseInt(id, 10) }
+    });
+
+    if (!existingPost) return res.status(404).json({ error: 'Post not found.' });
+
+    if (userRole?.toLowerCase() !== 'admin' && existingPost.authorId !== userId) {
+      return res.status(403).json({ error: 'Access denied. You can only update your own posts.' });
+    }
 
     const post = await prisma.post.update({
       where: { id: parseInt(id, 10) },
@@ -227,7 +278,7 @@ exports.updatePost = async (req, res) => {
         ...(allowComments !== undefined && { allowComments: allowComments === true || allowComments === 'true' }),
       },
       include: {
-        author: { select: { id: true, email: true, name: true } }
+        author: { select: { id: true, email: true } }
       }
     });
 
@@ -245,6 +296,19 @@ exports.updatePost = async (req, res) => {
 exports.deletePost = async (req, res) => {
   try {
     const { id } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    const existingPost = await prisma.post.findUnique({
+      where: { id: parseInt(id, 10) }
+    });
+
+    if (!existingPost) return res.status(404).json({ error: 'Post not found.' });
+
+    if (userRole?.toLowerCase() !== 'admin' && existingPost.authorId !== userId) {
+      return res.status(403).json({ error: 'Access denied. You can only delete your own posts.' });
+    }
+
     await prisma.post.delete({
       where: { id: parseInt(id, 10) }
     });
