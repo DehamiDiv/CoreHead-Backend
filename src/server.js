@@ -47,10 +47,9 @@ app.get('/api/preview/posts', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 3;
 
-    // ✅ Uses the 'Post' model (maps to Post table via User relation)
     const posts = await prisma.post.findMany({
       take: limit,
-      where: { status: 'published' },
+      where: { status: 'Published' },
       orderBy: { createdAt: 'desc' },
       select: {
         id:         true,
@@ -58,21 +57,22 @@ app.get('/api/preview/posts', async (req, res) => {
         slug:       true,
         excerpt:    true,
         coverImage: true,
+        category:   true,
         status:     true,
-        createdAt: true,
+        createdAt:  true,
         author: {
-          select: { id: true, email: true }
+          select: { id: true, email: true, name: true }
         }
       }
     });
 
     const postsWithAuthor = posts.map((post) => ({
       ...post,
-      featured_image: post.coverImage,
+      thumbnailUrl:   post.coverImage || null,
+      featured_image: post.coverImage || null,
       published_date: post.createdAt,
-      author_name:    post.author?.email || null,
+      author_name:    post.author?.name || post.author?.email || null,
       author_avatar:  null,
-      category:       null,
       tags:           [],
     }));
 
@@ -117,5 +117,6 @@ app.use('/api/comments',  commentRoutes);
 
 // ── Start Server ──
 app.listen(PORT, () => {
-  console.log(`🚀 Server is running on http://localhost:${PORT} `);
+  console.log(`Server is running on http://localhost:${PORT}`);
 });
+

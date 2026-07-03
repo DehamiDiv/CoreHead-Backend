@@ -166,7 +166,6 @@ router.put('/history/:id', authMiddleware, async (req, res) => {
   }
 });
 
-
 // ─── POST /api/ai/generate-blog ──────────────────────────────
 router.post('/generate-blog', authMiddleware, aiLimiter, async (req, res) => {
   try {
