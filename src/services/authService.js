@@ -32,16 +32,22 @@ const loginUser = async (email, password) => {
         throw new Error('Invalid email or password');
     }
 
-    // 3. Generate JWT Token (JSON Web Token)
+    // 3. Generate JWT Tokens
     // We include the user's role in the payload so the frontend can enforce permissions locally.
     // The secret key is stored in the .env file for security.
-    const token = jwt.sign(
+    const accessToken = jwt.sign(
         { id: user.id, email: user.email, role: user.role }, 
         process.env.JWT_SECRET || 'corehead_secret_key_123', 
-        { expiresIn: '1d' } // Token expires in 1 day for security
+        { expiresIn: '1d' } // Access token expires in 1 day
     );
 
-    return { user, token };
+    const refreshToken = jwt.sign(
+        { id: user.id, email: user.email, role: user.role },
+        process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET || 'corehead_refresh_secret_key_123',
+        { expiresIn: '7d' } // Refresh token expires in 7 days
+    );
+
+    return { user, accessToken, refreshToken };
 };
 
 const getUserById = async (id) => {

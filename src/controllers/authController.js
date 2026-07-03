@@ -47,13 +47,14 @@ const login = async (req, res) => {
             return res.status(400).json({ error: 'Email and password are required' });
         }
 
-        const { user, token } = await authService.loginUser(email, password);
+        const { user, accessToken, refreshToken } = await authService.loginUser(email, password);
 
         // The login response now includes the 'role' field.
         // This is crucial for the frontend to know if it should redirect to the /admin dashboard.
         res.status(200).json({
             message: 'Login successful',
-            token,
+            accessToken,
+            refreshToken,
             user: { 
                 id: user.id, 
                 email: user.email, 
@@ -98,9 +99,35 @@ const getAllUsers = async (req, res) => {
     }
 };
 
+const refreshToken = async (req, res) => {
+    try {
+        const { refreshToken } = req.body;
+        if (!refreshToken) {
+            return res.status(400).json({ error: 'Refresh token is required' });
+        }
+
+        const decoded = require('jsonwebtoken').verify(
+            refreshToken,
+            process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET || 'corehead_refresh_secret_key_123'
+        );
+
+        // Issue a new access token
+        const accessToken = require('jsonwebtoken').sign(
+            { id: decoded.id, email: decoded.email, role: decoded.role },
+            process.env.JWT_SECRET || 'corehead_secret_key_123',
+            { expiresIn: '1d' }
+        );
+
+        res.status(200).json({ accessToken });
+    } catch (error) {
+        res.status(401).json({ error: 'Invalid or expired refresh token' });
+    }
+};
+
 module.exports = {
     register,
     login,
+    refreshToken,
     getCurrentUser,
     getAllUsers
 };

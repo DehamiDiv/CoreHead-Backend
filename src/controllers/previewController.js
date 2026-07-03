@@ -9,6 +9,7 @@ const getPreviewPosts = async (req, res) => {
         const limit = parseInt(req.query.limit) || 3;
 
         let posts = await prisma.post.findMany({
+            where: { status: 'published' },
             take: limit,
             orderBy: { createdAt: 'desc' },
             select: {
@@ -16,26 +17,35 @@ const getPreviewPosts = async (req, res) => {
                 title: true,
                 slug: true,
                 excerpt: true,
-                imageUrl: true,
+                coverImage: true,
+                category: true,
                 createdAt: true,
-                author: { select: { email: true } }
+                author: { select: { email: true, name: true } }
             }
         });
 
+        // Map coverImage → thumbnailUrl for frontend compatibility
+        const mapped = posts.map(p => ({
+            ...p,
+            thumbnailUrl: p.coverImage || null,
+        }));
+
         // If no posts are in the database yet, send dummy mock posts
-        if (posts.length === 0) {
-            posts = Array.from({ length: limit }).map((_, index) => ({
+        if (mapped.length === 0) {
+            const mocks = Array.from({ length: limit }).map((_, index) => ({
                 id: `mock-${index + 1}`,
                 title: `Sample Blog Post Title ${index + 1}`,
                 slug: `sample-blog-post-${index + 1}`,
                 excerpt: "This is a placeholder excerpt for the preview blog post card.",
-                imageUrl: "https://via.placeholder.com/400x250",
+                thumbnailUrl: "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=800&q=80",
+                category: "Nature",
                 createdAt: new Date().toISOString(),
-                author: { email: "admin@corehead.com" }
+                author: { email: "admin@corehead.com", name: "Admin" }
             }));
+            return res.status(200).json({ posts: mocks });
         }
 
-        res.status(200).json(posts);
+        res.status(200).json({ posts: mapped });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

@@ -10,6 +10,9 @@ router.post('/register', authController.register);
 // POST /api/auth/login
 router.post('/login', authController.login);
 
+// POST /api/auth/refresh-token
+router.post('/refresh-token', authController.refreshToken);
+
 // GET /api/auth/me - Get currently logged in user
 router.get('/me', authMiddleware, authController.getCurrentUser);
 
