@@ -3,6 +3,24 @@ const jwt = require('jsonwebtoken');
 const userRepository = require('../repositories/userRepository');
 const emailService = require('./emailService');
 
+function buildOtpEmailHtml(otp) {
+    return `
+        <div style="font-family: sans-serif; padding: 20px; color: #333; max-width: 520px;">
+            <h2 style="margin:0 0 12px">Welcome to CoreHead!</h2>
+            <p>Thank you for signing up. Please verify your email address by entering the following code:</p>
+            <h1 style="color: #2563eb; letter-spacing: 8px; font-size: 36px; margin: 20px 0;">${otp}</h1>
+            <p style="color:#64748b;font-size:13px">This code will expire soon. If you did not create an account, you can ignore this email.</p>
+        </div>
+    `;
+}
+
+/**
+ * Whether it's safe to return the OTP in the API response (local/dev only).
+ */
+function allowDevOtpInResponse() {
+    return process.env.NODE_ENV !== 'production';
+}
+
 const registerUser = async (email, password, name) => {
     // 1. Check if the user already exists
     const existingUser = await userRepository.findUserByEmail(email);
@@ -28,25 +46,77 @@ const registerUser = async (email, password, name) => {
 
     // 5. Send verification email with OTP
     console.log(`[AUTH] Verification OTP for ${email}: ${otp}`);
+    let emailResult = {
+        sent: false,
+        realDelivery: false,
+        error: 'Email send was not attempted',
+        provider: null,
+        previewUrl: null,
+    };
     try {
-        await emailService.sendEmail({
+        emailResult = await emailService.sendEmail({
             to: email,
             subject: 'Verify Your Email - CoreHead',
             text: `Your verification code is: ${otp}`,
-            html: `
-                <div style="font-family: sans-serif; padding: 20px; color: #333;">
-                    <h2>Welcome to CoreHead!</h2>
-                    <p>Thank you for signing up. Please verify your email address by entering the following code:</p>
-                    <h1 style="color: #2563eb; letter-spacing: 5px;">${otp}</h1>
-                    <p>This code will expire soon.</p>
-                </div>
-            `
+            html: buildOtpEmailHtml(otp),
         });
     } catch (error) {
-        console.error("Email sending failed during signup:", error);
+        console.error('Email sending failed during signup:', error);
+        emailResult = {
+            sent: false,
+            realDelivery: false,
+            error: error.message || 'Email send failed',
+            provider: null,
+            previewUrl: null,
+        };
     }
 
-    return newUser;
+    return {
+        user: newUser,
+        emailResult,
+        // Always available server-side; controller only exposes in non-production when not real delivery
+        otp,
+    };
+};
+
+/**
+ * Resend a new OTP for an unverified account.
+ */
+const resendVerificationOtp = async (email) => {
+    const user = await userRepository.findUserByEmail(email);
+    if (!user) {
+        throw new Error('User not found');
+    }
+    if (user.isEmailVerified) {
+        throw new Error('Email is already verified. You can log in.');
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    await userRepository.updateUser(user.id, {
+        emailVerificationOTP: otp,
+    });
+
+    console.log(`[AUTH] Resend verification OTP for ${email}: ${otp}`);
+    let emailResult;
+    try {
+        emailResult = await emailService.sendEmail({
+            to: email,
+            subject: 'Your CoreHead verification code',
+            text: `Your verification code is: ${otp}`,
+            html: buildOtpEmailHtml(otp),
+        });
+    } catch (error) {
+        console.error('Email sending failed during OTP resend:', error);
+        emailResult = {
+            sent: false,
+            realDelivery: false,
+            error: error.message || 'Email send failed',
+            provider: null,
+            previewUrl: null,
+        };
+    }
+
+    return { emailResult, otp, user };
 };
 
 const verifyEmail = async (email, otp) => {
@@ -55,7 +125,11 @@ const verifyEmail = async (email, otp) => {
         throw new Error('User not found');
     }
 
-    if (user.emailVerificationOTP !== otp) {
+    if (user.isEmailVerified) {
+        return user;
+    }
+
+    if (!user.emailVerificationOTP || user.emailVerificationOTP !== String(otp).trim()) {
         throw new Error('Invalid verification code');
     }
 
@@ -179,10 +253,12 @@ const getUserById = async (id) => {
 
 module.exports = {
     registerUser,
+    resendVerificationOtp,
     verifyEmail,
     loginUser,
     requestPasswordReset,
     resetPassword,
     refreshAccessToken,
-    getUserById
+    getUserById,
+    allowDevOtpInResponse,
 };

@@ -56,12 +56,37 @@ const register = async (req, res) => {
             });
         }
 
-        const newUser = await authService.registerUser(email, password, name);
+        const { user: newUser, emailResult, otp } = await authService.registerUser(
+            email,
+            password,
+            name
+        );
 
-        res.status(201).json({
-            message: 'User registered successfully',
-            user: { id: newUser.id, email: newUser.email, name: newUser.name }
-        });
+        const realDelivery = !!emailResult?.realDelivery || !!emailResult?.sent;
+        const payload = {
+            message: realDelivery
+                ? 'User registered successfully. Verification code sent to your email.'
+                : 'User registered successfully. Email was NOT delivered to a real inbox — use the code shown below or check the backend console.',
+            user: { id: newUser.id, email: newUser.email, name: newUser.name },
+            emailSent: !!emailResult?.sent,
+            emailRealDelivery: realDelivery,
+            emailProvider: emailResult?.provider || null,
+            emailPreviewUrl: emailResult?.previewUrl || null,
+            emailError: emailResult?.error || null,
+        };
+
+        // Dev convenience: when SMTP is missing, return OTP so verify can proceed
+        if (
+            !realDelivery &&
+            authService.allowDevOtpInResponse() &&
+            otp
+        ) {
+            payload.devOtp = otp;
+            payload.message =
+                'Account created. SMTP is not configured — OTP is shown below (and in the backend console). Configure EMAIL_HOST/EMAIL_USER/EMAIL_PASS for real Gmail delivery.';
+        }
+
+        res.status(201).json(payload);
     } catch (error) {
         res.status(400).json({ error: error.message });
     }
@@ -190,11 +215,46 @@ const verifyEmail = async (req, res) => {
     }
 };
 
+const resendOtp = async (req, res) => {
+    try {
+        const { email } = req.body;
+        if (!email) {
+            return res.status(400).json({ error: 'Email is required' });
+        }
+
+        const { emailResult, otp } = await authService.resendVerificationOtp(
+            String(email).trim().toLowerCase()
+        );
+
+        const realDelivery = !!emailResult?.realDelivery || !!emailResult?.sent;
+        const payload = {
+            message: realDelivery
+                ? 'A new verification code was sent to your email.'
+                : emailResult?.error ||
+                  'OTP generated but email was NOT delivered. Configure SMTP or use the code below.',
+            emailSent: !!emailResult?.sent,
+            emailRealDelivery: realDelivery,
+            emailProvider: emailResult?.provider || null,
+            emailPreviewUrl: emailResult?.previewUrl || null,
+            emailError: emailResult?.error || null,
+        };
+
+        if (!realDelivery && authService.allowDevOtpInResponse() && otp) {
+            payload.devOtp = otp;
+        }
+
+        res.status(200).json(payload);
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+    }
+};
+
 module.exports = {
     register,
     login,
     refreshToken,
     verifyEmail,
+    resendOtp,
     getCurrentUser,
     getAllUsers,
     forgotPassword,

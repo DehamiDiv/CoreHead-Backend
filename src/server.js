@@ -21,6 +21,7 @@ const categoryRoutes = require('./routes/categoryRoutes');
 const settingsRoutes = require('./routes/settingsRoutes');
 const mediaRoutes    = require('./routes/mediaRoutes');
 const commentRoutes  = require('./routes/commentRoutes');
+const siteRoutes     = require('./routes/siteRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -42,14 +43,43 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Server is running' });
 });
 
-// ── Preview Posts — called by friend's frontend ──
+// ── Preview Posts — public, site-scoped only (T15: no cross-tenant dump)
+// Requires ?siteId= or X-Site-Id. Only Published posts for that site.
 app.get('/api/preview/posts', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 3;
+    const rawSiteId = req.headers['x-site-id'] || req.query.siteId;
+    const siteId = rawSiteId ? parseInt(String(rawSiteId), 10) : null;
+
+    if (!siteId || !Number.isFinite(siteId)) {
+      return res.status(400).json({
+        success: false,
+        error: 'siteId is required (X-Site-Id header or ?siteId=).',
+        posts: [],
+      });
+    }
+
+    // Ensure site is active (do not leak inactive tenant content)
+    const site = await prisma.site.findUnique({ where: { id: siteId } });
+    if (!site || (site.status && String(site.status).toLowerCase() !== 'active')) {
+      return res.status(404).json({
+        success: false,
+        error: 'Site not found.',
+        posts: [],
+      });
+    }
+
+    const where = {
+      siteId,
+      OR: [
+        { status: { in: ['Published', 'published'] } },
+        { isPublished: true },
+      ],
+    };
 
     const posts = await prisma.post.findMany({
       take: limit,
-      where: { status: 'Published' },
+      where,
       orderBy: { createdAt: 'desc' },
       select: {
         id:         true,
@@ -59,6 +89,8 @@ app.get('/api/preview/posts', async (req, res) => {
         coverImage: true,
         category:   true,
         status:     true,
+        isPublished: true,
+        siteId:     true,
         createdAt:  true,
         author: {
           select: { id: true, email: true, name: true }
@@ -66,7 +98,14 @@ app.get('/api/preview/posts', async (req, res) => {
       }
     });
 
-    const postsWithAuthor = posts.map((post) => ({
+    // Defense in depth: only live statuses
+    const live = posts.filter(
+      (p) =>
+        p.isPublished === true ||
+        String(p.status || '').toLowerCase() === 'published'
+    );
+
+    const postsWithAuthor = live.map((post) => ({
       ...post,
       thumbnailUrl:   post.coverImage || null,
       featured_image: post.coverImage || null,
@@ -114,6 +153,14 @@ app.use('/api/categories',categoryRoutes);
 app.use('/api/settings',  settingsRoutes);
 app.use('/api/media',     mediaRoutes);
 app.use('/api/comments',  commentRoutes);
+app.use('/api/reactions', require('./routes/reactionRoutes'));
+app.use('/api/sites',     siteRoutes);
+
+// R1-3: public invite preview + accept (auth on accept)
+const siteController = require('./controllers/siteController');
+const authMiddleware = require('./middlewares/authMiddleware');
+app.get('/api/invites/:token', siteController.getInviteByToken);
+app.post('/api/invites/:token/accept', authMiddleware, siteController.acceptInvite);
 
 // ── Start Server ──
 app.listen(PORT, () => {

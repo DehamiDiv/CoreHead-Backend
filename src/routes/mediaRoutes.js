@@ -1,6 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const mediaController = require('../controllers/mediaController');
+const authMiddleware = require('../middlewares/authMiddleware');
+const { requireSite } = require('../middlewares/siteMiddleware');
+
+router.use(authMiddleware);
+router.use(requireSite);
 
 router.get('/', mediaController.getMedia);
 router.get('/trash', mediaController.getTrash);

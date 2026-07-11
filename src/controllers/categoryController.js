@@ -1,10 +1,10 @@
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const prisma = require('../models/prismaClient');
 
 exports.getCategories = async (req, res) => {
   try {
     const categories = await prisma.categories.findMany({
-      orderBy: { created_at: 'desc' }
+      where: { siteId: req.siteId },
+      orderBy: { created_at: 'desc' },
     });
     return res.status(200).json({ success: true, categories });
   } catch (error) {
@@ -16,24 +16,43 @@ exports.getCategories = async (req, res) => {
 exports.createCategory = async (req, res) => {
   try {
     const { name, slug, description } = req.body;
-    
-    // Check if slug exists
-    const existingCat = await prisma.categories.findUnique({ where: { slug } });
+
+    if (!name || !slug) {
+      return res.status(400).json({ success: false, message: 'Name and slug are required' });
+    }
+
+    const existingCat = await prisma.categories.findFirst({
+      where: {
+        siteId: req.siteId,
+        OR: [{ slug }, { name }],
+      },
+    });
+
     if (existingCat) {
-      return res.status(400).json({ success: false, message: 'Category slug already exists' });
+      return res.status(400).json({
+        success: false,
+        message: 'Category name or slug already exists on this site',
+      });
     }
 
     const newCategory = await prisma.categories.create({
       data: {
         name,
         slug,
-        description
-      }
+        description,
+        siteId: req.siteId,
+      },
     });
 
     return res.status(201).json({ success: true, category: newCategory });
   } catch (error) {
     console.error('Create category error:', error);
+    if (error.code === 'P2002') {
+      return res.status(400).json({
+        success: false,
+        message: 'Category name or slug already exists on this site',
+      });
+    }
     res.status(500).json({ success: false, message: 'Server error creating category' });
   }
 };
@@ -43,9 +62,16 @@ exports.updateCategory = async (req, res) => {
     const { id } = req.params;
     const { name, slug, description } = req.body;
 
+    const existing = await prisma.categories.findFirst({
+      where: { id: parseInt(id, 10), siteId: req.siteId },
+    });
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Category not found' });
+    }
+
     const updatedCategory = await prisma.categories.update({
-      where: { id: parseInt(id) },
-      data: { name, slug, description }
+      where: { id: parseInt(id, 10) },
+      data: { name, slug, description },
     });
 
     return res.status(200).json({ success: true, category: updatedCategory });
@@ -58,7 +84,15 @@ exports.updateCategory = async (req, res) => {
 exports.deleteCategory = async (req, res) => {
   try {
     const { id } = req.params;
-    await prisma.categories.delete({ where: { id: parseInt(id) } });
+
+    const existing = await prisma.categories.findFirst({
+      where: { id: parseInt(id, 10), siteId: req.siteId },
+    });
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Category not found' });
+    }
+
+    await prisma.categories.delete({ where: { id: parseInt(id, 10) } });
     return res.status(200).json({ success: true, message: 'Category deleted successfully' });
   } catch (error) {
     console.error('Delete category error:', error);

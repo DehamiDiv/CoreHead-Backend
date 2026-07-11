@@ -1,12 +1,12 @@
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const prisma = require('../models/prismaClient');
+const { isPlatformAdmin } = require('../utils/siteScope');
 
 // Save a new layout
 const saveLayout = async (req, res) => {
   try {
     const { name, layout_data, content_mode, grid_layout } = req.body;
-    const userId = req.user.id; // From authMiddleware
-    
+    const userId = req.user.id;
+
     if (!name || !layout_data) {
       return res.status(400).json({ error: 'Name and layout_data are required' });
     }
@@ -17,8 +17,9 @@ const saveLayout = async (req, res) => {
         layout_data,
         content_mode: content_mode || 'static',
         grid_layout: grid_layout || 'grid',
-        user_id: userId
-      }
+        user_id: userId,
+        site_id: req.siteId,
+      },
     });
 
     res.status(201).json(layout);
@@ -28,44 +29,40 @@ const saveLayout = async (req, res) => {
   }
 };
 
-// Get all layouts (filtered by user unless admin)
+// Get all layouts for current site
 const getLayouts = async (req, res) => {
   try {
-    const userId = req.user.id;
-    const userRole = req.user.role;
-
-    let query = {
-      orderBy: { updated_at: 'desc' }
-    };
-
-    // If not admin, only show user's own layouts
-    if (userRole?.toLowerCase() !== 'admin') {
-      query.where = { user_id: userId };
-    }
-
-    const layouts = await prisma.builder_layouts.findMany(query);
+    const layouts = await prisma.builder_layouts.findMany({
+      where: { site_id: req.siteId },
+      orderBy: { updated_at: 'desc' },
+    });
     res.json({ layouts });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch layouts' });
   }
 };
 
-// Get layout by ID
+// Get layout by ID (same site)
 const getLayoutById = async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user.id;
     const userRole = req.user.role;
 
-    const layout = await prisma.builder_layouts.findUnique({
-      where: { id: parseInt(id) }
+    const layout = await prisma.builder_layouts.findFirst({
+      where: {
+        id: parseInt(id, 10),
+        site_id: req.siteId,
+      },
     });
 
     if (!layout) return res.status(404).json({ error: 'Layout not found' });
 
-    // Check ownership
-    if (userRole?.toLowerCase() !== 'admin' && layout.user_id !== userId) {
-      return res.status(403).json({ error: 'Access denied. This layout does not belong to you.' });
+    if (!isPlatformAdmin(userRole) && layout.user_id !== userId) {
+      // Site members can view site layouts
+      if (!req.siteRole) {
+        return res.status(403).json({ error: 'Access denied. This layout does not belong to you.' });
+      }
     }
 
     res.json({ layout });
@@ -82,26 +79,35 @@ const updateLayout = async (req, res) => {
     const userId = req.user.id;
     const userRole = req.user.role;
 
-    // First check if layout exists and belongs to user
-    const existingLayout = await prisma.builder_layouts.findUnique({
-      where: { id: parseInt(id) }
+    const existingLayout = await prisma.builder_layouts.findFirst({
+      where: {
+        id: parseInt(id, 10),
+        site_id: req.siteId,
+      },
     });
 
     if (!existingLayout) return res.status(404).json({ error: 'Layout not found' });
 
-    if (userRole?.toLowerCase() !== 'admin' && existingLayout.user_id !== userId) {
+    const siteRole = String(req.siteRole || '').toUpperCase();
+    const canEdit =
+      isPlatformAdmin(userRole) ||
+      existingLayout.user_id === userId ||
+      siteRole === 'OWNER' ||
+      siteRole === 'EDITOR';
+
+    if (!canEdit) {
       return res.status(403).json({ error: 'Access denied. You can only update your own layouts.' });
     }
 
     const layout = await prisma.builder_layouts.update({
-      where: { id: parseInt(id) },
+      where: { id: parseInt(id, 10) },
       data: {
         name,
         layout_data,
         content_mode,
         grid_layout,
-        updated_at: new Date()
-      }
+        updated_at: new Date(),
+      },
     });
 
     res.json(layout);
@@ -117,18 +123,27 @@ const deleteLayout = async (req, res) => {
     const userId = req.user.id;
     const userRole = req.user.role;
 
-    const existingLayout = await prisma.builder_layouts.findUnique({
-      where: { id: parseInt(id) }
+    const existingLayout = await prisma.builder_layouts.findFirst({
+      where: {
+        id: parseInt(id, 10),
+        site_id: req.siteId,
+      },
     });
 
     if (!existingLayout) return res.status(404).json({ error: 'Layout not found' });
 
-    if (userRole?.toLowerCase() !== 'admin' && existingLayout.user_id !== userId) {
+    const siteRole = String(req.siteRole || '').toUpperCase();
+    const canDelete =
+      isPlatformAdmin(userRole) ||
+      existingLayout.user_id === userId ||
+      siteRole === 'OWNER';
+
+    if (!canDelete) {
       return res.status(403).json({ error: 'Access denied. You can only delete your own layouts.' });
     }
 
     await prisma.builder_layouts.delete({
-      where: { id: parseInt(id) }
+      where: { id: parseInt(id, 10) },
     });
     res.json({ message: 'Layout deleted successfully' });
   } catch (error) {
@@ -141,5 +156,5 @@ module.exports = {
   getLayouts,
   getLayoutById,
   updateLayout,
-  deleteLayout
+  deleteLayout,
 };

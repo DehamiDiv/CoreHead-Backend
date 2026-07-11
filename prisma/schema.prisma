@@ -10,12 +10,16 @@ datasource db {
 model ai_layouts {
   id               Int       @id @default(autoincrement())
   user_id          Int?
+  site_id          Int?
   prompt           String
   layout_type      String?   @db.VarChar(50)
   design_style     String?   @db.VarChar(50)
   features         Json?
   generated_layout Json
   created_at       DateTime? @default(now()) @db.Timestamp(6)
+  site             Site?     @relation(fields: [site_id], references: [id], onDelete: Cascade)
+
+  @@index([site_id], map: "idx_ai_layouts_site")
 }
 
 model authors {
@@ -35,19 +39,28 @@ model builder_layouts {
   content_mode String?   @default("static") @db.VarChar(20)
   grid_layout  String?   @default("grid") @db.VarChar(50)
   user_id      Int?
+  site_id      Int?
   created_at   DateTime? @default(now()) @db.Timestamp(6)
   updated_at   DateTime? @default(now()) @db.Timestamp(6)
+  site         Site?     @relation(fields: [site_id], references: [id], onDelete: Cascade)
 
   @@index([updated_at(sort: Desc)], map: "idx_builder_layouts_updated")
   @@index([user_id], map: "idx_builder_layouts_user")
+  @@index([site_id], map: "idx_builder_layouts_site")
 }
 
 model categories {
   id          Int       @id @default(autoincrement())
-  name        String    @unique @db.VarChar(100)
-  slug        String    @unique @db.VarChar(100)
+  name        String    @db.VarChar(100)
+  slug        String    @db.VarChar(100)
   description String?
+  siteId      Int?
   created_at  DateTime? @default(now()) @db.Timestamp(6)
+  site        Site?     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, slug], map: "uq_categories_site_slug")
+  @@unique([siteId, name], map: "uq_categories_site_name")
+  @@index([siteId], map: "idx_categories_site")
 }
 
 model User {
@@ -61,14 +74,107 @@ model User {
   resetPasswordExpires DateTime?
   isEmailVerified      Boolean           @default(false)
   emailVerificationOTP String?
+  /// Profile image URL or path (not raw base64 preferred). Text allows longer media paths.
+  avatar               String?           @db.Text
+  bio                  String?
+  designation          String?
+  nicename             String?
   createdAt            DateTime          @default(now())
   updatedAt            DateTime          @updatedAt
   binding              Binding[]
   posts                Post[]
   templates            templates[]
   comments             Comment[]
+  ownedSites           Site[]            @relation("SiteOwner")
+  siteMemberships      SiteMember[]
+  sentSiteInvites      SiteInvite[]      @relation("SiteInviteSender")
 
   @@map("users")
+}
+
+/// Multi-tenant site/workspace owned by a user (T1).
+/// Public URL slug is unique platform-wide (e.g. /s/{slug}).
+/// R6: optional customDomain + plan/billing fields (Stripe not required for demo).
+model Site {
+  id        Int      @id @default(autoincrement())
+  name      String   @db.VarChar(255)
+  slug      String   @unique @db.VarChar(100)
+  ownerId   Int
+  status    String   @default("active") @db.VarChar(20)
+  logo      String?  @db.VarChar(500)
+  /// e.g. blog.acme.com — unique when set; served via host rewrite
+  customDomain       String?   @unique @db.VarChar(255)
+  /// unconfigured | pending | verified
+  domainStatus       String    @default("unconfigured") @db.VarChar(20)
+  domainVerifyToken  String?   @db.VarChar(64)
+  /// free | premium | enterprise
+  plan               String    @default("free") @db.VarChar(20)
+  /// active | trial | canceled
+  planStatus         String    @default("active") @db.VarChar(20)
+  planUpdatedAt      DateTime? @db.Timestamp(6)
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+  updatedAt DateTime @updatedAt @db.Timestamp(6)
+
+  owner           User              @relation("SiteOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  members         SiteMember[]
+  invites         SiteInvite[]
+  posts           Post[]
+  categories      categories[]
+  media           media[]
+  templates       templates[]
+  settings        Setting[]
+  bindings        Binding[]
+  pageLayouts     PageLayout[]
+  pages           Page[]
+  builderLayouts  builder_layouts[]
+  aiLayouts       ai_layouts[]
+
+  @@index([ownerId], map: "idx_sites_owner")
+  @@index([status], map: "idx_sites_status")
+  @@index([customDomain], map: "idx_sites_custom_domain")
+  @@map("sites")
+}
+
+/// Site membership with per-site role (OWNER | EDITOR | AUTHOR).
+/// Owner is also recorded as a member for consistent access checks.
+model SiteMember {
+  id        Int      @id @default(autoincrement())
+  siteId    Int
+  userId    Int
+  role      String   @default("EDITOR") @db.VarChar(20)
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+  updatedAt DateTime @updatedAt @db.Timestamp(6)
+
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, userId], map: "uq_site_members_site_user")
+  @@index([userId], map: "idx_site_members_user")
+  @@index([siteId], map: "idx_site_members_site")
+  @@map("site_members")
+}
+
+/// R1-3: Pending site team invites (email + token accept link).
+/// Existing users may be added immediately as members; pending invites cover new emails.
+model SiteInvite {
+  id        Int      @id @default(autoincrement())
+  siteId    Int
+  email     String   @db.VarChar(255)
+  role      String   @default("EDITOR") @db.VarChar(20)
+  token     String   @unique @db.VarChar(64)
+  status    String   @default("pending") @db.VarChar(20)
+  invitedBy Int
+  expiresAt DateTime @db.Timestamp(6)
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+  updatedAt DateTime @updatedAt @db.Timestamp(6)
+
+  site    Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  inviter User @relation("SiteInviteSender", fields: [invitedBy], references: [id], onDelete: Cascade)
+
+  @@index([siteId], map: "idx_site_invites_site")
+  @@index([email], map: "idx_site_invites_email")
+  @@index([status], map: "idx_site_invites_status")
+  @@map("site_invites")
 }
 
 model templates {
@@ -79,12 +185,15 @@ model templates {
   status     String            @default("draft")
   layoutJson Json
   authorId   Int
+  siteId     Int?
   version    Int               @default(1)
   createdAt  DateTime          @default(now())
   updatedAt  DateTime          @updatedAt
   author     User              @relation(fields: [authorId], references: [id])
+  site       Site?             @relation(fields: [siteId], references: [id], onDelete: Cascade)
   history    TemplateHistory[]
 
+  @@index([siteId], map: "idx_templates_site")
   @@map("Template")
 }
 
@@ -101,10 +210,11 @@ model TemplateHistory {
 model Post {
   id              Int       @id @default(autoincrement())
   title           String    @db.VarChar(255)
-  slug            String    @unique @db.VarChar(255)
+  slug            String    @db.VarChar(255)
   excerpt         String?
   content         String
-  coverImage      String?   @db.VarChar(500)
+  /// Was VarChar(500); base64 data-URLs exceeded limit and broke post updates
+  coverImage      String?   @db.Text
   category        String?   @db.VarChar(100)
   categories      String?
   tags            String[]
@@ -118,17 +228,22 @@ model Post {
   status          String    @default("published") @db.VarChar(20)
   featured        Boolean?  @default(false)
   showToc         Boolean   @default(false)
-  allowComments   Boolean   @default(false)
+  allowComments   Boolean   @default(true)
   authorId        Int
+  siteId          Int?
   createdAt       DateTime? @default(now()) @db.Timestamp(6)
   updatedAt       DateTime? @default(now()) @updatedAt @db.Timestamp(6)
   author          User      @relation(fields: [authorId], references: [id])
+  site            Site?     @relation(fields: [siteId], references: [id], onDelete: Cascade)
   comments        Comment[]
+  reactions       PostReaction[]
 
+  @@unique([siteId, slug], map: "uq_posts_site_slug")
   @@index([authorId], map: "idx_posts_author")
   @@index([category], map: "idx_posts_category")
   @@index([publishedAt], map: "idx_posts_published_date")
   @@index([status], map: "idx_posts_status")
+  @@index([siteId], map: "idx_posts_site")
 }
 
 model Binding {
@@ -136,18 +251,46 @@ model Binding {
   mode      String
   selected  Json
   userId    Int?
+  siteId    Int?
   updatedAt DateTime @updatedAt
   user      User?    @relation(fields: [userId], references: [id])
+  site      Site?    @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId], map: "idx_bindings_site")
 }
 
 model PageLayout {
   id        Int      @id @default(autoincrement())
-  slug      String   @unique
+  slug      String
   name      String
   layout    Json
   isActive  Boolean  @default(true)
+  siteId    Int?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  site      Site?    @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, slug], map: "uq_page_layouts_site_slug")
+  @@index([siteId], map: "idx_page_layouts_site")
+}
+
+/// R3-1: Custom HTML pages (site-scoped). Public at /s/{siteSlug}/p/{pageSlug}
+model Page {
+  id          Int      @id @default(autoincrement())
+  name        String   @db.VarChar(255)
+  slug        String   @db.VarChar(150)
+  htmlContent String   @db.Text
+  status      String   @default("Draft") @db.VarChar(20)
+  siteId      Int
+  createdAt   DateTime @default(now()) @db.Timestamp(6)
+  updatedAt   DateTime @updatedAt @db.Timestamp(6)
+
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, slug], map: "uq_pages_site_slug")
+  @@index([siteId], map: "idx_pages_site")
+  @@index([status], map: "idx_pages_status")
+  @@map("pages")
 }
 
 model Comment {
@@ -165,4 +308,49 @@ model Comment {
   user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@map("comments")
+}
+
+/// Public post reactions (like / love / insightful / celebrate) — visitorKey from browser
+model PostReaction {
+  id         Int      @id @default(autoincrement())
+  postId     Int
+  type       String   @db.VarChar(30)
+  visitorKey String   @db.VarChar(64)
+  createdAt  DateTime @default(now()) @db.Timestamp(6)
+  updatedAt  DateTime @updatedAt @db.Timestamp(6)
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, visitorKey], map: "uq_post_reactions_post_visitor")
+  @@index([postId], map: "idx_post_reactions_post")
+  @@map("post_reactions")
+}
+
+model media {
+  id        Int      @id @default(autoincrement())
+  name      String
+  type      String
+  size      String
+  url       String
+  isDeleted Boolean  @default(false)
+  siteId    Int?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  site      Site?    @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId], map: "idx_media_site")
+}
+
+model Setting {
+  id        Int      @id @default(autoincrement())
+  key       String
+  value     String
+  siteId    Int?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  site      Site?    @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, key], map: "uq_settings_site_key")
+  @@index([siteId], map: "idx_settings_site")
+  @@map("settings")
 }
