@@ -39,6 +39,7 @@ const POSTS = [
     excerpt:
       "Learn how to start your first vegetable garden with this complete beginner-friendly guide covering soil prep, plant selection, and ongoing care.",
     category: 'Plants & Gardens',
+    // Elegant cover set (see scripts/updateVerduraPostCovers.js for sources)
     coverImage: '/uploads/verdura-cover-vegetable-garden.jpg',
     featured: true,
     content: `<h2>Getting Started with Your Vegetable Garden</h2>
@@ -205,15 +206,15 @@ function resolveLogoPath() {
  * Files are copied into CoreHead-Backend/public/uploads by the seed (or exist already).
  */
 function logoPublicUrl() {
-  return '/uploads/verdura-icon.svg';
+  return '/uploads/verdura-logo.png';
 }
 
 function headerLogoUrl() {
-  return '/uploads/verdura-logo-light.svg';
+  return '/uploads/verdura-logo.png';
 }
 
 function footerLogoUrl() {
-  return '/uploads/verdura-logo-light.svg';
+  return '/uploads/verdura-logo.png';
 }
 
 function ensureUploadLogos() {
@@ -226,6 +227,9 @@ function ensureUploadLogos() {
     ['verdura-icon.jpg', '../../corehead-frontend/frontend/public/demo/verdura-icon.jpg'],
     ['verdura-logo.svg', '../../corehead-frontend/frontend/public/demo/verdura-logo.svg'],
     ['verdura-logo-light.svg', '../../corehead-frontend/frontend/public/demo/verdura-logo-light.svg'],
+    ['verdura-icon-editorial.svg', '../../corehead-frontend/frontend/public/demo/verdura-icon-editorial.svg'],
+    ['verdura-logo-editorial.svg', '../../corehead-frontend/frontend/public/demo/verdura-logo-editorial.svg'],
+    ['verdura-logo-editorial-dark.svg', '../../corehead-frontend/frontend/public/demo/verdura-logo-editorial-dark.svg'],
   ];
   for (const [name, rel] of pairs) {
     const dest = path.join(uploadsDir, name);
@@ -342,25 +346,37 @@ async function main() {
     update: { role: 'OWNER' },
   });
 
+  // Website metadata (Admin → Settings → Website Settings)
+  await upsertSetting(site.id, 'website_metadata', {
+    websiteName: SITE_NAME,
+    pageTitle: 'Verdura — Nature, Gardens & Sustainable Living',
+    description:
+      'Verdura is a nature and sustainable living magazine. Practical gardening guides, wildlife conservation stories, eco living tips, and outdoor adventure inspiration for people who care about the planet.',
+    favicon: '/uploads/verdura-icon.svg',
+    ogImage: '/uploads/verdura-hero-home.jpg',
+    scripts: [],
+  });
+  console.log('✅ Website metadata saved');
+
   // Branding settings (Nature theme)
   await upsertSetting(site.id, 'active_theme', { themeId: THEME_ID, id: THEME_ID });
   await upsertSetting(site.id, `theme_${THEME_ID}_colours`, {
-    primary: '#166534',
-    background: '#f0fdf4',
-    foreground: '#14532d',
-    accent: '#22c55e',
+    primary: '#1a3d2e',
+    background: '#f4f1ea',
+    foreground: '#1a3d2e',
+    accent: '#c5a572',
     card: '#ffffff',
-    cardForeground: '#14532d',
-    muted: '#4d7c5a',
+    cardForeground: '#1a3d2e',
+    muted: '#5c6b5f',
   });
   await upsertSetting(site.id, `theme_${THEME_ID}_header`, {
-    headerBg: '#14532d',
-    headerFont: '#f0fdf4',
+    headerBg: '#1a3d2e',
+    headerFont: '#f5f0e6',
     headerLogo: headerLogoUrl(),
     ctaText: 'Explore stories',
     ctaUrl: `/s/${SITE_SLUG}/blog`,
-    ctaBg: '#22c55e',
-    ctaColor: '#052e16',
+    ctaBg: '#f5f0e6',
+    ctaColor: '#1a3d2e',
     navLinks: [
       { id: 1, name: 'Home', link: `/s/${SITE_SLUG}` },
       { id: 2, name: 'Journal', link: `/s/${SITE_SLUG}/blog` },
@@ -369,12 +385,12 @@ async function main() {
     ],
   });
   await upsertSetting(site.id, `theme_${THEME_ID}_footer`, {
-    footerBg: '#052e16',
-    footerFont: '#86efac',
+    footerBg: '#0f2e22',
+    footerFont: '#c5d5c0',
     footerLogo: footerLogoUrl(),
     footerDescription:
-      'Verdura is a nature & sustainable living magazine — gardens, wildlife, eco living, and outdoor adventure for people who care about the planet.',
-    copyrightText: '© 2026 Verdura. All rights reserved.',
+      'Verdura — a nature & beauty journal. Gardens, wildlife, and conscious living, told with quiet luxury.',
+    copyrightText: '© 2026 Verdura Studio. All rights reserved.',
     quickLinks: [
       { id: 1, name: 'Home', link: `/s/${SITE_SLUG}` },
       { id: 2, name: 'Journal', link: `/s/${SITE_SLUG}/blog` },
@@ -382,8 +398,48 @@ async function main() {
       { id: 4, name: 'Contact', link: `/s/${SITE_SLUG}/p/contact` },
     ],
   });
-  await upsertSetting(site.id, `theme_${THEME_ID}_font`, { font: 'dm-sans' });
+  await upsertSetting(site.id, `theme_${THEME_ID}_font`, { font: 'georgia' });
   console.log('✅ Branding (Nature theme) applied');
+
+  // Public home layout + all section copy (Appearance → Homepage)
+  await upsertSetting(site.id, 'home_layout', {
+    homeStyle: 'nature',
+    eyebrow: 'Nature · Beauty · Collections',
+    tagline:
+      'A nature & beauty journal — gardens, wildlife, and conscious living, told with quiet luxury.',
+    heroImage: '/demo/verdura-hero-editorial.png',
+    captionLeft: 'New stories with beauty\nNature collections',
+    captionRight: 'Verdura studio\n2026',
+    featuredEyebrow: 'This week',
+    featuredTitle: 'Featured stories',
+    sideRailLabel: 'More to explore',
+    pillarsEyebrow: 'Why Verdura',
+    pillarsTitle: 'A magazine built for modern readers',
+    pillarsBody:
+      'Beautiful public pages, published stories only, and branding that feels like your own product — not a template dump.',
+    pillars: [
+      {
+        title: 'Grow greener',
+        body: 'Practical gardening and eco-living guides you can use this weekend.',
+      },
+      {
+        title: 'Protect wildlife',
+        body: 'Conservation stories and ethical ways to reconnect with the wild.',
+      },
+      {
+        title: 'See the planet',
+        body: 'Outdoor adventures and photography tips from the field.',
+      },
+    ],
+    latestEyebrow: 'Latest',
+    latestTitle: 'From the journal',
+    ctaEyebrow: 'Start reading',
+    ctaTitle: 'Grow something good today',
+    ctaBody:
+      'Browse the full archive of published stories, guides, and field notes.',
+    ctaButton: 'Explore all posts',
+  });
+  console.log('✅ Home layout sections filled (nature editorial)');
 
   // Categories
   for (const cat of CATEGORIES) {

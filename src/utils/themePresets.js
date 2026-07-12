@@ -27,6 +27,7 @@ const PRESETS = {
       footerDescription: 'Stories and updates from our team.',
     },
     font: 'dm-sans',
+    homeStyle: 'classic',
   },
   'theme-1': {
     colours: {
@@ -51,6 +52,7 @@ const PRESETS = {
       footerDescription: 'Inspired by nature and growth.',
     },
     font: 'dm-sans',
+    homeStyle: 'nature',
   },
   'theme-2': {
     colours: {
@@ -75,6 +77,7 @@ const PRESETS = {
       footerDescription: 'Bold stories, bright ideas.',
     },
     font: 'inter',
+    homeStyle: 'classic',
   },
   'theme-3': {
     colours: {
@@ -99,30 +102,34 @@ const PRESETS = {
       footerDescription: 'Elegant editorial for modern readers.',
     },
     font: 'georgia',
+    homeStyle: 'magazine',
   },
   'theme-4': {
+    // Soft Bloom — calm meditation (lavender / mist, no green)
     colours: {
-      primary: '#db2777',
-      background: '#fdf2f8',
-      foreground: '#831843',
-      accent: '#f472b6',
-      card: '#ffffff',
-      cardForeground: '#9d174d',
-      muted: '#9d174d',
+      primary: '#7B6B9A',
+      background: '#F8F6FA',
+      foreground: '#2C2835',
+      accent: '#C4A882',
+      card: '#FFFFFF',
+      cardForeground: '#2C2835',
+      muted: '#8A8496',
     },
     header: {
-      headerBg: '#ffffff',
-      headerFont: '#9d174d',
-      ctaBg: '#db2777',
-      ctaColor: '#ffffff',
-      ctaText: 'Discover',
+      headerBg: '#F8F6FA',
+      headerFont: '#2C2835',
+      ctaBg: '#7B6B9A',
+      ctaColor: '#F8F6FA',
+      ctaText: 'Start reading',
     },
     footer: {
-      footerBg: '#831843',
-      footerFont: '#fbcfe8',
-      footerDescription: 'Soft tones for lifestyle & culture.',
+      footerBg: '#2C2835',
+      footerFont: '#D4CFE0',
+      footerDescription:
+        'A calm space for wellness, reflection, and stories that help you breathe.',
     },
     font: 'dm-sans',
+    homeStyle: 'bloom',
   },
   'theme-5': {
     colours: {
@@ -147,6 +154,7 @@ const PRESETS = {
       footerDescription: 'Wanderlust and written journeys.',
     },
     font: 'ibm-plex',
+    homeStyle: 'classic',
   },
   'theme-6': {
     colours: {
@@ -171,6 +179,7 @@ const PRESETS = {
       footerDescription: 'Strength, discipline, results.',
     },
     font: 'inter',
+    homeStyle: 'dark',
   },
   'theme-7': {
     colours: {
@@ -195,6 +204,7 @@ const PRESETS = {
       footerDescription: 'Professional portfolio & insights.',
     },
     font: 'ibm-plex',
+    homeStyle: 'minimal',
   },
   'theme-8': {
     colours: {
@@ -219,6 +229,7 @@ const PRESETS = {
       footerDescription: 'Consulting insights that scale.',
     },
     font: 'inter',
+    homeStyle: 'classic',
   },
   'theme-9': {
     colours: {
@@ -243,6 +254,7 @@ const PRESETS = {
       footerDescription: 'Clean editorial for curious minds.',
     },
     font: 'georgia',
+    homeStyle: 'magazine',
   },
   'theme-10': {
     colours: {
@@ -267,6 +279,7 @@ const PRESETS = {
       footerDescription: 'News, culture, and long reads.',
     },
     font: 'dm-sans',
+    homeStyle: 'magazine',
   },
   'theme-11': {
     colours: {
@@ -291,6 +304,7 @@ const PRESETS = {
       footerDescription: 'Modern dark experience.',
     },
     font: 'inter',
+    homeStyle: 'dark',
   },
 };
 
@@ -324,15 +338,44 @@ const DEFAULT_THEME_FOOTER_LINKS = [
 
 /**
  * Merge DB branding fragments with preset defaults.
+ * homeStyleOverride: optional site-level home layout from Appearance → home_layout
+ * Layout only changes structure; colours stay from Appearance → Colours / Header / Footer.
  */
-const mergeBranding = (themeId, colours, header, footer, font) => {
+const mergeBranding = (themeId, colours, header, footer, font, homeStyleOverride) => {
   const preset = getPreset(themeId);
+  const valid = new Set([
+    'classic',
+    'nature',
+    'bloom',
+    'portals',
+    'bento',
+    'studio',
+    'paper',
+    'glass',
+    // legacy aliases
+    'dark',
+    'magazine',
+    'minimal',
+    'agents',
+    'editorial',
+  ]);
+  let homeStyle = preset.homeStyle || 'classic';
+  if (homeStyleOverride && valid.has(String(homeStyleOverride))) {
+    homeStyle = String(homeStyleOverride);
+  }
+  // Normalize legacy / duplicate layouts → unique designs
+  if (homeStyle === 'editorial') homeStyle = 'nature';
+  if (homeStyle === 'agents') homeStyle = 'portals';
+  if (homeStyle === 'dark') homeStyle = 'studio';
+  if (homeStyle === 'magazine') homeStyle = 'paper';
+  if (homeStyle === 'minimal') homeStyle = 'glass';
   return {
     themeId: themeId || 'default',
     colours: { ...preset.colours, ...(colours || {}) },
     header: { ...preset.header, ...(header || {}) },
     footer: { ...preset.footer, ...(footer || {}) },
     font: font || preset.font,
+    homeStyle,
   };
 };
 

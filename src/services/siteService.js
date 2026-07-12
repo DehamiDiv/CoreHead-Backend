@@ -40,6 +40,12 @@ const loadPublicBranding = async (siteId) => {
     const headerRaw = map[`theme_${themeKey}_header`] || {};
     const footerRaw = map[`theme_${themeKey}_footer`] || {};
     const fontRaw = map[`theme_${themeKey}_font`] || {};
+    // Site-level public home layout (Appearance → Home layout)
+    const homeLayoutRaw = map.home_layout || {};
+    const homeStyleOverride =
+      homeLayoutRaw.homeStyle ||
+      homeLayoutRaw.layout ||
+      (typeof homeLayoutRaw === 'string' ? homeLayoutRaw : null);
 
     const pickDefined = (obj) => {
       const out = {};
@@ -50,8 +56,8 @@ const loadPublicBranding = async (siteId) => {
       return out;
     };
 
-    // Merge DB overrides with theme preset so public always gets a full palette (R2-4)
-    return mergeBranding(
+    // Merge DB overrides with theme preset so public always has a full palette (R2-4)
+    const branding = mergeBranding(
       themeKey,
       pickDefined({
         primary: coloursRaw.primary || coloursRaw.colourPrimary,
@@ -85,8 +91,54 @@ const loadPublicBranding = async (siteId) => {
           ? footerRaw.socialLinks
           : null,
       }),
-      fontRaw.font || fontRaw.family || null
+      fontRaw.font || fontRaw.family || null,
+      homeStyleOverride
     );
+
+    const homeObj =
+      homeLayoutRaw && typeof homeLayoutRaw === 'object' ? homeLayoutRaw : {};
+    // Normalize pillars array (title/body only; empty rows dropped)
+    let pillars = null;
+    if (Array.isArray(homeObj.pillars)) {
+      pillars = homeObj.pillars
+        .map((p) => {
+          if (!p || typeof p !== 'object') return null;
+          const title = p.title != null ? String(p.title).trim() : '';
+          const body = p.body != null ? String(p.body).trim() : '';
+          if (!title && !body) return null;
+          return pickDefined({ title: title || null, body: body || null });
+        })
+        .filter(Boolean);
+      if (pillars.length === 0) pillars = null;
+    }
+    branding.home = pickDefined({
+      homeStyle: branding.homeStyle,
+      // Hero
+      eyebrow: homeObj.eyebrow,
+      tagline: homeObj.tagline,
+      heroImage: homeObj.heroImage,
+      captionLeft: homeObj.captionLeft,
+      captionRight: homeObj.captionRight,
+      // Featured + side rail
+      featuredEyebrow: homeObj.featuredEyebrow,
+      featuredTitle: homeObj.featuredTitle,
+      sideRailLabel: homeObj.sideRailLabel,
+      // Pillars / services
+      pillarsEyebrow: homeObj.pillarsEyebrow,
+      pillarsTitle: homeObj.pillarsTitle,
+      pillarsBody: homeObj.pillarsBody,
+      pillars,
+      // Latest
+      latestEyebrow: homeObj.latestEyebrow,
+      latestTitle: homeObj.latestTitle,
+      // Bottom CTA
+      ctaEyebrow: homeObj.ctaEyebrow,
+      ctaTitle: homeObj.ctaTitle,
+      ctaBody: homeObj.ctaBody,
+      ctaButton: homeObj.ctaButton,
+    });
+
+    return branding;
   } catch (err) {
     console.warn('loadPublicBranding failed:', err.message);
     return null;
