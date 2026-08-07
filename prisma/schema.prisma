@@ -79,6 +79,11 @@ model User {
   bio                  String?
   designation          String?
   nicename             String?
+  subscription_status  String            @default("FREE")
+  stripe_customer_id   String?
+  ai_credits           Int               @default(5)
+  ai_credits_used      Int               @default(0)
+  last_credits_reset   DateTime          @default(now())
   createdAt            DateTime          @default(now())
   updatedAt            DateTime          @updatedAt
   binding              Binding[]

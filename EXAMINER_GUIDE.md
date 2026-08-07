@@ -501,4 +501,31 @@ Examiner may ask: "Change default history limit" → replace 50 with any number
 
 ---
 
+# SECTION 6 — TIME-BASED CREDIT LIMIT RESET (COOLDOWN SYSTEM)
+
+This feature implements a dynamic, time-based credit reset cooldown system that ensures free tiers automatically reload after a predefined duration (default 24 hours), encouraging daily active engagement on the platform.
+
+## 🏗️ Technical Architecture
+1. **Schema Update (`prisma/schema.prisma`)**:
+   - Added `last_credits_reset` DateTime column (default: `now()`) to track when credits were last reloaded.
+2. **Middleware Verification (`src/middlewares/creditGuard.js`)**:
+   - Compares current time with `last_credits_reset`.
+   - If the duration exceeds the cooldown (default: 24 hours), the middleware resets `ai_credits_used` to `0` and updates `last_credits_reset` to `now()` in the database.
+   - If limits are still exceeded, it responds with HTTP `402 Limit Exceeded` along with `cooldown_remaining` (in seconds).
+3. **Session Update (`src/controllers/authController.js`)**:
+   - The `/api/auth/me` endpoint performs the same time check, ensuring credits are reset silently in the background on dashboard reload.
+   - Returns `cooldown_remaining` in the user payload to inform the client.
+4. **Live UI Ticking Timer (`components/admin/PaywallModal.tsx`)**:
+   - If credits are exceeded, the modal parses `cooldown_remaining` and initializes a React local state timer that counts down in real-time (`18h 42m 15s`).
+
+## ⚙️ How to Demo / Configure for Evaluation
+Examiners can easily verify this cooldown logic in real time:
+1. Open `.env` in the backend directory.
+2. Add the variable: `AI_COOLDOWN_MS=60000` (1 minute).
+3. Attempt to generate layouts past the 5/5 limit.
+4. Observe the timer counting down from 1 minute on the Paywall Modal.
+5. Once the countdown completes, click "Try Again" — your credits will have successfully reset to `0/5 used`, permitting another generation!
+
+---
+
 END OF GUIDE

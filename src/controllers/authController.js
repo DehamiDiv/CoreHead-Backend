@@ -23,7 +23,7 @@ const register = async (req, res) => {
             const validationResult = await validate.validate(email);
             if (!validationResult.valid) {
                 const { validators } = validationResult;
-                
+
                 if (validators.regex && !validators.regex.valid) {
                     return res.status(400).json({ error: 'Please enter a valid email address format.' });
                 }
@@ -33,7 +33,7 @@ const register = async (req, res) => {
                 if (validators.typo && !validators.typo.valid && validators.typo.bestSuggestion) {
                     return res.status(400).json({ error: `Did you mean ${validators.typo.bestSuggestion}?` });
                 }
-                
+
                 // For MX/SMTP, we only reject if NODE_ENV is 'production'
                 if (process.env.NODE_ENV === 'production') {
                     if (validators.mx && !validators.mx.valid) {
@@ -51,8 +51,8 @@ const register = async (req, res) => {
         // Strong Password Validation
         const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
         if (!passwordRegex.test(password)) {
-            return res.status(400).json({ 
-                error: 'Password is too weak. It must be at least 8 characters long and include at least one uppercase letter, one lowercase letter, one number, and one special character (@$!%*?&).' 
+            return res.status(400).json({
+                error: 'Password is too weak. It must be at least 8 characters long and include at least one uppercase letter, one lowercase letter, one number, and one special character (@$!%*?&).'
             });
         }
 
@@ -106,12 +106,12 @@ const login = async (req, res) => {
             message: 'Login successful',
             accessToken,
             refreshToken,
-            user: { 
-                id: user.id, 
-                email: user.email, 
-                role: user.role, 
-                name: user.name, 
-                avatar: user.avatar 
+            user: {
+                id: user.id,
+                email: user.email,
+                role: user.role,
+                name: user.name,
+                avatar: user.avatar
             }
         });
     } catch (error) {
@@ -136,20 +136,54 @@ const refreshToken = async (req, res) => {
 
 const getCurrentUser = async (req, res) => {
     try {
-        const user = await authService.getUserById(req.user.id);
+        let user = await authService.getUserById(req.user.id);
         if (!user) {
             return res.status(404).json({ error: 'User not found' });
         }
-        res.status(200).json({ 
-            user: { 
-                id: user.id, 
-                email: user.email, 
-                role: user.role, 
-                name: user.name, 
-                avatar: user.avatar 
-            } 
+
+        // Apply time-based reset if cooldown period has expired
+        const COOLDOWN_MS = process.env.AI_COOLDOWN_MS
+            ? parseInt(process.env.AI_COOLDOWN_MS)
+            : 24 * 60 * 60 * 1000;
+
+        const now = new Date();
+        const lastReset = user.last_credits_reset ? new Date(user.last_credits_reset) : new Date(user.createdAt);
+        // Safeguard against DB timezone offset differences
+        const timeDiff = Math.max(0, now.getTime() - lastReset.getTime());
+
+        let cooldownRemaining = 0;
+        if (timeDiff >= COOLDOWN_MS) {
+            const { PrismaClient } = require('@prisma/client');
+            const localPrisma = new PrismaClient();
+            user = await localPrisma.user.update({
+                where: { id: user.id },
+                data: {
+                    ai_credits_used: 0,
+                    last_credits_reset: now
+                }
+            });
+            await localPrisma.$disconnect();
+            console.log(`[AI-CREDITS] Cooldown reset on fetch(/me) for user: ${user.email}`);
+        } else {
+            cooldownRemaining = Math.max(0, Math.ceil((COOLDOWN_MS - timeDiff) / 1000));
+        }
+
+        res.status(200).json({
+            user: {
+                id: user.id,
+                email: user.email,
+                role: user.role,
+                name: user.name,
+                avatar: user.avatar,
+                subscription_status: user.subscription_status,
+                ai_credits: user.ai_credits,
+                ai_credits_used: user.ai_credits_used,
+                last_credits_reset: user.last_credits_reset,
+                cooldown_remaining: cooldownRemaining
+            }
         });
     } catch (error) {
+        console.error('GetCurrentUser auth check error:', error);
         res.status(500).json({ error: 'Failed to fetch user details' });
     }
 };
