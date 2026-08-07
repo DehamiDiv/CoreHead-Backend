@@ -88,17 +88,11 @@ app.get('/api/preview/posts', async (req, res) => {
         slug: true,
         excerpt: true,
         coverImage: true,
-<<<<<<< Updated upstream
         category: true,
         status: true,
         isPublished: true,
         siteId: true,
         createdAt: true,
-=======
-        category: true,
-        status: true,
-        createdAt: true,
->>>>>>> Stashed changes
         author: {
           select: { id: true, email: true, name: true }
         }
