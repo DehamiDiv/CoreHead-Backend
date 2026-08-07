@@ -12,8 +12,30 @@ const stripe = require('stripe')(stripeSecret);
 router.post('/checkout-session', authMiddleware, async (req, res) => {
     try {
         const userId = req.user.id;
+        const { mock } = req.body;
 
-        // 2. Real Stripe session checkout flow
+        // If mock is requested, or Stripe keys are absent/placeholder, use Mock Activation Flow
+        const hasStripe = process.env.STRIPE_SECRET_KEY && process.env.STRIPE_SECRET_KEY !== 'sk_test_placeholder_key';
+
+        if (mock || !hasStripe) {
+            console.log(`[Billing Sandbox] Simulating payment success for User ID: ${userId}`);
+
+            // Instantly upgrade user in DB as a bypass
+            await prisma.user.update({
+                where: { id: userId },
+                data: {
+                    subscription_status: 'PRO',
+                    ai_credits_used: 0
+                }
+            });
+
+            return res.json({
+                success: true,
+                url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/payment/success?mock=true`
+            });
+        }
+
+        // Real Stripe session checkout flow
         console.log(`[Billing] Creating Stripe Checkout Session for User ID: ${userId}`);
         const session = await stripe.checkout.sessions.create({
             payment_method_types: ['card'],
