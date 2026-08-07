@@ -102,6 +102,24 @@ const MEDIA_ASSETS = [
     type: 'image/jpeg',
     postSlugs: [],
   },
+  {
+    key: 'hero-home',
+    name: 'Verdura Home Hero Landscape.jpg',
+    fileName: 'verdura-hero-home.jpg',
+    source:
+      'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1920&q=85',
+    type: 'image/jpeg',
+    postSlugs: [],
+  },
+  {
+    key: 'hero-editorial',
+    name: 'Verdura Editorial Hero.jpg',
+    fileName: 'verdura-hero-editorial.jpg',
+    source:
+      'https://images.unsplash.com/photo-1459411552884-841db9b3cc2a?w=1800&q=90',
+    type: 'image/jpeg',
+    postSlugs: [],
+  },
 ];
 
 /** Local brand files already in public/uploads or frontend demo. */

@@ -10,16 +10,48 @@ const INVITE_TTL_DAYS = 14;
  * R2-4: Load public-safe appearance branding for a site from settings keys.
  * Keys mirror admin Appearance page: active_theme, theme_{id}_header|footer|colours|font
  */
+/** Unwrap JSON strings (handles accidental double-stringify in settings.value). */
 const parseSettingValue = (raw) => {
   if (raw === undefined || raw === null) return null;
-  try {
-    return typeof raw === 'string' ? JSON.parse(raw) : raw;
-  } catch {
-    return raw;
+  let cur = raw;
+  for (let i = 0; i < 3; i += 1) {
+    if (typeof cur !== 'string') break;
+    const s = cur.trim();
+    if (!s) return cur;
+    // Only attempt parse for JSON-looking values
+    if (!(s.startsWith('{') || s.startsWith('[') || s.startsWith('"'))) break;
+    try {
+      cur = JSON.parse(s);
+    } catch {
+      break;
+    }
   }
+  return cur;
 };
 
 const { mergeBranding } = require('../utils/themePresets');
+
+/** Extract homeStyle from home_layout setting (object or bare string). */
+const extractHomeStyle = (homeLayoutRaw) => {
+  if (homeLayoutRaw == null || homeLayoutRaw === '') return null;
+  if (typeof homeLayoutRaw === 'string') {
+    const s = homeLayoutRaw.trim();
+    if (!s) return null;
+    // Bare layout id: "bloom"
+    if (!s.startsWith('{') && !s.startsWith('[')) return s;
+    try {
+      const parsed = JSON.parse(s);
+      return extractHomeStyle(parsed);
+    } catch {
+      return s;
+    }
+  }
+  if (typeof homeLayoutRaw === 'object') {
+    const style = homeLayoutRaw.homeStyle || homeLayoutRaw.layout || null;
+    return style != null && style !== '' ? String(style) : null;
+  }
+  return null;
+};
 
 const loadPublicBranding = async (siteId) => {
   try {
@@ -36,16 +68,18 @@ const loadPublicBranding = async (siteId) => {
       (active && (active.themeId || active.id || active)) || 'default';
     const themeKey = String(themeId);
 
-    const coloursRaw = map[`theme_${themeKey}_colours`] || {};
-    const headerRaw = map[`theme_${themeKey}_header`] || {};
-    const footerRaw = map[`theme_${themeKey}_footer`] || {};
-    const fontRaw = map[`theme_${themeKey}_font`] || {};
-    // Site-level public home layout (Appearance → Home layout)
+    // Prefer site-level palette (Appearance → Colours) so custom colours always win
+    // over stale theme packs / wrong active_theme keys.
+    const coloursRaw =
+      map.site_colours || map[`theme_${themeKey}_colours`] || {};
+    const headerRaw =
+      map.site_header || map[`theme_${themeKey}_header`] || {};
+    const footerRaw =
+      map.site_footer || map[`theme_${themeKey}_footer`] || {};
+    const fontRaw = map.site_font || map[`theme_${themeKey}_font`] || {};
+    // Site-level public home layout (Appearance → Homepage → Use layout)
     const homeLayoutRaw = map.home_layout || {};
-    const homeStyleOverride =
-      homeLayoutRaw.homeStyle ||
-      homeLayoutRaw.layout ||
-      (typeof homeLayoutRaw === 'string' ? homeLayoutRaw : null);
+    const homeStyleOverride = extractHomeStyle(homeLayoutRaw);
 
     const pickDefined = (obj) => {
       const out = {};
@@ -116,6 +150,7 @@ const loadPublicBranding = async (siteId) => {
       // Hero
       eyebrow: homeObj.eyebrow,
       tagline: homeObj.tagline,
+      heroTitle: homeObj.heroTitle,
       heroImage: homeObj.heroImage,
       captionLeft: homeObj.captionLeft,
       captionRight: homeObj.captionRight,
@@ -136,6 +171,24 @@ const loadPublicBranding = async (siteId) => {
       ctaTitle: homeObj.ctaTitle,
       ctaBody: homeObj.ctaBody,
       ctaButton: homeObj.ctaButton,
+      ctaBackgroundImage: homeObj.ctaBackgroundImage,
+      // Layout 6 · Paper portfolio pack
+      socialLinks: Array.isArray(homeObj.socialLinks)
+        ? homeObj.socialLinks
+        : null,
+      contactEmail: homeObj.contactEmail,
+      contactPhone: homeObj.contactPhone,
+      contactAddress: homeObj.contactAddress,
+      aboutTitle: homeObj.aboutTitle,
+      aboutDescription: homeObj.aboutDescription,
+      aboutImage: homeObj.aboutImage,
+      services: Array.isArray(homeObj.services) ? homeObj.services : null,
+      videoUrl: homeObj.videoUrl,
+      videoThumbnail: homeObj.videoThumbnail,
+      testimonials: Array.isArray(homeObj.testimonials)
+        ? homeObj.testimonials
+        : null,
+      clients: Array.isArray(homeObj.clients) ? homeObj.clients : null,
     });
 
     return branding;
