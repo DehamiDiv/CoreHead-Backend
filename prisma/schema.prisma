@@ -53,7 +53,7 @@ model categories {
 model User {
   id                   Int        @id @default(autoincrement())
   email                String     @unique
-  password             String
+  password             String?
   name                 String?
   nicename             String?
   designation          String?
@@ -61,6 +61,8 @@ model User {
   avatar               String?
   role                 String     @default("user")
   status               String     @default("active")
+  provider             String     @default("local")
+  providerId           String?
   resetPasswordToken   String?
   resetPasswordExpires DateTime?
   isEmailVerified      Boolean    @default(false)

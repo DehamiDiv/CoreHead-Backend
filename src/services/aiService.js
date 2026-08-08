@@ -30,8 +30,42 @@ function generateRuleBasedLayout(prompt) {
     business: 'photo-1507003211169-0a1dd7228f2d',
     fashion: 'photo-1558769132-cb1aea458c5e',
     nature: 'photo-1441974231531-c6227db76b6e',
+    sports: 'photo-1461896836934-ffe607ba8211',
+    gaming: 'photo-1538481199705-c710c4e965fc',
+    education: 'photo-1503676260728-1c00da094a0b',
+    space: 'photo-1451187580459-43490279c0fa',
+    music: 'photo-1511671782779-c97d3d27a1d4',
+    animal: 'photo-1543466835-00a7907e9de1',
+    car: 'photo-1503376780353-7e6692767b70',
+    finance: 'photo-1559526324-4b87b5e36e44',
+    graduation: 'photo-1627556704302-624286467c65',
   };
-  let imgKey = Object.keys(imageSeeds).find(k => lower.includes(k)) || 'business';
+
+  const imageSynonyms = {
+    food: ['food', 'recipe', 'cook', 'cooking', 'pasta', 'pizza', 'kitchen', 'restaurant', 'delicious', 'bake', 'salad'],
+    bakery: ['bakery', 'cake', 'bread', 'pastry', 'cookie', 'croissant'],
+    tech: ['tech', 'computer', 'software', 'coding', 'programming', 'developer', 'ai', 'gadget', 'robot'],
+    travel: ['travel', 'trip', 'vacation', 'flight', 'hotel', 'explore', 'beach', 'mountain'],
+    health: ['health', 'fitness', 'workout', 'diet', 'gym', 'exercise', 'yoga', 'wellness'],
+    sports: ['sports', 'football', 'soccer', 'cricket', 'basketball', 'tennis', 'athlete', 'training', 'run', 'marathon'],
+    gaming: ['gaming', 'game', 'gamer', 'playstation', 'xbox', 'nintendo', 'steam'],
+    education: ['education', 'school', 'learn', 'study', 'class', 'book', 'teacher', 'university'],
+    space: ['space', 'galaxy', 'universe', 'planet', 'star', 'astronomy', 'nasa', 'mars'],
+    music: ['music', 'song', 'sing', 'concert', 'guitar', 'piano', 'band', 'instrument'],
+    animal: ['animal', 'pet', 'dog', 'cat', 'wildlife', 'bird', 'puppy', 'kitten'],
+    car: ['car', 'vehicle', 'automotive', 'bike', 'motorcycle', 'drive', 'racing'],
+    finance: ['finance', 'money', 'crypto', 'investment', 'stock', 'wealth', 'bank', 'saving'],
+    graduation: ['graduation', 'graduate', 'degree', 'diploma', 'convocation', 'garland', 'cap']
+  };
+
+  let imgKey = Object.keys(imageSeeds).find(k => {
+    const synonyms = imageSynonyms[k] || [k];
+    return synonyms.some(syn => {
+      const regex = new RegExp(`\\b${syn}\\b`, 'i');
+      return regex.test(lower);
+    });
+  }) || 'business';
+
   blocks.push({
     id: id(),
     type: 'Image',
@@ -149,7 +183,16 @@ Rules:
 - Generate 4-8 blocks total
 - Make content relevant to the user's prompt
 - IMPORTANT: Add { "marginBottom": "30px" } to the "styles" of EVERY block so they don't overlap and have proper spacing.
-- For Image blocks, use: https://images.unsplash.com/photo-1499750310107-5fef28a66643?w=1200&q=80
+- For Image blocks, you MUST choose the most relevant photo URL from the following list of verified, high-quality Unsplash URLs (do NOT make up or hallucinate other photo IDs, as they will cause 404 errors):
+  * Food/Cooking: https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=1200&q=80
+  * Tech/Coding/Software: https://images.unsplash.com/photo-1518770660439-4636190af475?w=1200&q=80
+  * Nature/Travel: https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=1200&q=80
+  * Space/Science/Universe: https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1200&q=80
+  * Sports/Fitness/Workout: https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=1200&q=80
+  * Gaming/Gamer: https://images.unsplash.com/photo-1538481199705-c710c4e965fc?w=1200&q=80
+  * Education/Graduation: https://images.unsplash.com/photo-1627556704302-624286467c65?w=1200&q=80
+  * Business/Office: https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=1200&q=80
+  * Generic/Abstract Gradient: https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=1200&q=80
 - Return ONLY a valid JSON object with the "blocks" property. No markdown, no explanation.
 
 User prompt: "${prompt}"

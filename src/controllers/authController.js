@@ -10,6 +10,22 @@ const register = async (req, res) => {
             return res.status(400).json({ error: 'Email and password are required' });
         }
 
+        // Name Validation (if provided)
+        if (name && typeof name === 'string') {
+            const trimmedName = name.trim();
+            if (trimmedName.length < 2) {
+                return res.status(400).json({ error: 'Name must be at least 2 characters long.' });
+            }
+            if (trimmedName.length > 100) {
+                return res.status(400).json({ error: 'Name cannot exceed 100 characters.' });
+            }
+            // Allow letters from any language, spaces, hyphens, periods, or apostrophes
+            const nameRegex = /^[\p{L}\s'\-\.]+$/u;
+            if (!nameRegex.test(trimmedName)) {
+                return res.status(400).json({ error: 'Name can only contain letters, spaces, hyphens, periods, or apostrophes.' });
+            }
+        }
+
         // Email Format Validation (Regex)
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(email)) {
@@ -91,6 +107,27 @@ const login = async (req, res) => {
         });
     } catch (error) {
         res.status(401).json({ error: error.message });
+    }
+};
+
+const googleLogin = async (req, res) => {
+    try {
+        const { credential } = req.body;
+
+        if (!credential) {
+            return res.status(400).json({ error: 'Credential ID token is required.' });
+        }
+
+        const { user, accessToken, refreshToken } = await authService.googleLogin(credential);
+
+        res.status(200).json({
+            message: 'Google login successful',
+            accessToken,
+            refreshToken,
+            user
+        });
+    } catch (error) {
+        res.status(400).json({ error: error.message });
     }
 };
 
@@ -193,6 +230,7 @@ const verifyEmail = async (req, res) => {
 module.exports = {
     register,
     login,
+    googleLogin,
     refreshToken,
     verifyEmail,
     getCurrentUser,

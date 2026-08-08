@@ -16,11 +16,22 @@ const getPreviewPosts = async (req, res) => {
                 title: true,
                 slug: true,
                 excerpt: true,
-                imageUrl: true,
+                coverImage: true,
                 createdAt: true,
                 author: { select: { email: true } }
             }
         });
+
+        // Map coverImage to imageUrl for compatibility with the frontend
+        posts = posts.map(post => ({
+            id: post.id,
+            title: post.title,
+            slug: post.slug,
+            excerpt: post.excerpt,
+            imageUrl: post.coverImage || "https://via.placeholder.com/400x250",
+            createdAt: post.createdAt,
+            author: post.author
+        }));
 
         // If no posts are in the database yet, send dummy mock posts
         if (posts.length === 0) {

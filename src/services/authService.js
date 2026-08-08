@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const userRepository = require('../repositories/userRepository');
 const emailService = require('./emailService');
+const { OAuth2Client } = require('google-auth-library');
 
 const registerUser = async (email, password, name) => {
     // 1. Check if the user already exists
@@ -132,7 +133,8 @@ const refreshAccessToken = async (token) => {
 const requestPasswordReset = async (email) => {
     const user = await userRepository.findUserByEmail(email);
     if (!user) {
-        throw new Error('If an account with that email exists, a reset link has been sent.');
+        // Securely return without throwing error to prevent email enumeration
+        return;
     }
 
     const crypto = require('crypto');
@@ -145,14 +147,20 @@ const requestPasswordReset = async (email) => {
     });
 
     const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`;
+    console.log(`[AUTH] Password Reset Link for ${email}: ${resetUrl}`);
 
-    await emailService.sendEmail({
-        to: email,
-        subject: 'Password Reset Request - CoreHead',
-        text: `You requested a password reset. Please click here: ${resetUrl}`,
-        html: `<p>You requested a password reset. Please click the button below to reset your password:</p>
-               <a href="${resetUrl}" style="padding: 10px 20px; background-color: #2563eb; color: white; text-decoration: none; border-radius: 5px;">Reset Password</a>`
-    });
+    try {
+        await emailService.sendEmail({
+            to: email,
+            subject: 'Password Reset Request - CoreHead',
+            text: `You requested a password reset. Please click here: ${resetUrl}`,
+            html: `<p>You requested a password reset. Please click the button below to reset your password:</p>
+                   <a href="${resetUrl}" style="padding: 10px 20px; background-color: #2563eb; color: white; text-decoration: none; border-radius: 5px;">Reset Password</a>`
+        });
+    } catch (emailError) {
+        console.error("Email sending failed during password reset:", emailError.message);
+        // Do not throw, allowing development reset using the console log link
+    }
 };
 
 const resetPassword = async (token, newPassword) => {
@@ -173,6 +181,78 @@ const resetPassword = async (token, newPassword) => {
     });
 };
 
+const googleLogin = async (credential) => {
+    if (!process.env.GOOGLE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID.includes('xxxxxxxxx')) {
+        throw new Error('Google OAuth is not configured on the backend. Please set a valid GOOGLE_CLIENT_ID in your .env file.');
+    }
+
+    let payload;
+    try {
+        const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+        const ticket = await client.verifyIdToken({
+            idToken: credential,
+            audience: process.env.GOOGLE_CLIENT_ID
+        });
+        payload = ticket.getPayload();
+    } catch (verifyError) {
+        console.error('Google token verification failed:', verifyError.message);
+        throw new Error('Invalid Google credential token.');
+    }
+
+    const { email, name, picture, sub } = payload;
+
+    // Check if user already exists
+    let user = await userRepository.findUserByEmail(email);
+
+    if (user) {
+        // Link account if registering from Google for the first time
+        const updates = {};
+        if (user.provider === 'local') {
+            updates.provider = 'google';
+            updates.providerId = sub;
+            updates.isEmailVerified = true; // Google email is verified
+        }
+        if (!user.avatar && picture) {
+            updates.avatar = picture;
+        }
+
+        if (Object.keys(updates).length > 0) {
+            user = await userRepository.updateUser(user.id, updates);
+        }
+    } else {
+        // Register a new user
+        user = await userRepository.createUser({
+            email,
+            name: name || '',
+            password: null, // nullable in DB
+            role: 'author', // Default role for self-registration
+            isEmailVerified: true,
+            provider: 'google',
+            providerId: sub,
+            avatar: picture || null
+        });
+    }
+
+    // Generate tokens
+    const accessToken = jwt.sign(
+        { id: user.id, email: user.email, role: user.role },
+        process.env.JWT_SECRET || 'corehead_secret_key_123',
+        { expiresIn: '15m' }
+    );
+
+    const refreshToken = jwt.sign(
+        { id: user.id },
+        process.env.REFRESH_TOKEN_SECRET || 'corehead_refresh_secret_456',
+        { expiresIn: '7d' }
+    );
+
+    return {
+        user: { id: user.id, email: user.email, role: user.role, name: user.name, avatar: user.avatar },
+        accessToken,
+        refreshToken
+    };
+};
+
 const getUserById = async (id) => {
     return await userRepository.findUserById(id);
 };
@@ -181,6 +261,7 @@ module.exports = {
     registerUser,
     verifyEmail,
     loginUser,
+    googleLogin,
     requestPasswordReset,
     resetPassword,
     refreshAccessToken,
