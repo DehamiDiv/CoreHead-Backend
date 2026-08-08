@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 64" role="img" aria-label="Verdura">
+  <defs>
+    <linearGradient id="leafGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#22c55e"/>
+      <stop offset="100%" stop-color="#14532d"/>
+    </linearGradient>
+  </defs>
+  <!-- Leaf mark -->
+  <g transform="translate(4,6)">
+    <path d="M26 4 C40 10 48 24 46 38 C32 42 16 36 8 22 C14 12 20 6 26 4Z" fill="url(#leafGrad)"/>
+    <path d="M18 18 C26 24 34 32 38 40" fill="none" stroke="#f0fdf4" stroke-width="2.2" stroke-linecap="round"/>
+    <circle cx="14" cy="28" r="3" fill="#86efac" opacity="0.9"/>
+  </g>
+  <!-- Wordmark -->
+  <text x="62" y="42" font-family="Georgia, 'Times New Roman', serif" font-size="32" font-weight="700" fill="#14532d" letter-spacing="0.5">Verdura</text>
+</svg>

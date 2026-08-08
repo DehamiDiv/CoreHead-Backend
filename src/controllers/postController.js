@@ -1,4 +1,55 @@
 const prisma = require('../models/prismaClient');
+const { assertSameSite } = require('../middlewares/siteMiddleware');
+const { isPlatformAdmin } = require('../utils/siteScope');
+
+/** Canonical post statuses (T11) */
+const POST_STATUS = {
+  PUBLISHED: 'Published',
+  DRAFT: 'Draft',
+  UNPUBLISHED: 'Unpublished',
+};
+
+/**
+ * Normalize free-form status strings to Published | Draft | Unpublished.
+ */
+const normalizeStatus = (raw, fallback = POST_STATUS.DRAFT) => {
+  const s = String(raw ?? fallback).trim().toLowerCase();
+  if (s === 'published' || s === 'publish' || s === 'live') return POST_STATUS.PUBLISHED;
+  if (s === 'unpublished' || s === 'unpublish' || s === 'private') return POST_STATUS.UNPUBLISHED;
+  if (s === 'draft' || s === 'pending' || s === '') return POST_STATUS.DRAFT;
+  // Accept already-canonical values
+  if (raw === POST_STATUS.PUBLISHED || raw === POST_STATUS.DRAFT || raw === POST_STATUS.UNPUBLISHED) {
+    return raw;
+  }
+  return POST_STATUS.DRAFT;
+};
+
+const isLiveStatus = (status) => normalizeStatus(status) === POST_STATUS.PUBLISHED;
+
+/**
+ * Build Prisma fields for a status change (keeps isPublished in sync).
+ * @param {string} statusInput
+ * @param {{ previousPublishedAt?: Date|null, published_date?: any }} opts
+ */
+const buildStatusFields = (statusInput, opts = {}) => {
+  const status = normalizeStatus(statusInput);
+  const published = status === POST_STATUS.PUBLISHED;
+
+  let publishedAt = opts.previousPublishedAt ?? null;
+  if (published) {
+    if (opts.published_date) {
+      publishedAt = new Date(opts.published_date);
+    } else if (!publishedAt) {
+      publishedAt = new Date();
+    }
+  }
+
+  return {
+    status,
+    isPublished: published,
+    publishedAt: published ? publishedAt : publishedAt, // keep historical date when unpublishing
+  };
+};
 
 // Helper to format post with author details safely
 const formatPostData = (post) => {
@@ -10,15 +61,33 @@ const formatPostData = (post) => {
       id: post.author.id,
       name,
       email: post.author.email,
-      avatar: post.author.avatar || name.charAt(0).toUpperCase()
+      avatar: post.author.avatar || name.charAt(0).toUpperCase(),
     };
   }
 
   const { author: rawAuthor, ...postWithoutAuthor } = post;
-  return { ...postWithoutAuthor, author };
+  const status = normalizeStatus(post.status || (post.isPublished ? POST_STATUS.PUBLISHED : POST_STATUS.DRAFT));
+  const cover = post.coverImage || null;
+  return {
+    ...postWithoutAuthor,
+    status,
+    isPublished: status === POST_STATUS.PUBLISHED,
+    author,
+    // Aliases used by admin UI + public renderer
+    thumbnailUrl: cover,
+    featured_image: cover,
+    imageUrl: cover,
+  };
 };
 
-// Create a new post
+const canManagePost = (post, userId, userRole, siteRole) => {
+  const role = String(siteRole || '').toUpperCase();
+  const canManageAll =
+    isPlatformAdmin(userRole) || role === 'OWNER' || role === 'EDITOR';
+  return canManageAll || post.authorId === userId;
+};
+
+// Create a new post (requires site context)
 exports.createPost = async (req, res) => {
   try {
     const {
@@ -40,93 +109,131 @@ exports.createPost = async (req, res) => {
       structuredData,
       published_date,
       showToc,
-      allowComments
+      show_toc,
+      allowComments,
+      allow_comments,
     } = req.body;
+
+    const allowCommentsFlag =
+      allowComments !== undefined ? allowComments : allow_comments;
+    // Default ON when omitted
+    const allowCommentsValue =
+      allowCommentsFlag === undefined || allowCommentsFlag === null
+        ? true
+        : allowCommentsFlag === true || allowCommentsFlag === 'true';
 
     if (!title || !slug || !content) {
       return res.status(400).json({ error: 'Title, slug, and content are required.' });
     }
 
-    // Use logged-in user's ID, or fall back to provided authorId, or default to 1
-    const resolvedAuthorId = req.user?.id || parseInt(authorId, 10) || 1;
+    if (!req.siteId) {
+      return res.status(400).json({ error: 'Site context required (X-Site-Id).' });
+    }
 
-    // Handle category
-    const finalCategory = category || (Array.isArray(categories) && categories.length > 0 ? categories[0] : 'General');
+    // Use logged-in user's ID, or fall back to provided authorId
+    const resolvedAuthorId = req.user?.id || parseInt(authorId, 10);
+    if (!resolvedAuthorId) {
+      return res.status(400).json({ error: 'Author could not be resolved.' });
+    }
 
-    // Serialize arrays to comma-separated strings (schema stores as String?)
+    const finalCategory =
+      category ||
+      (Array.isArray(categories) && categories.length > 0 ? categories[0] : 'General');
+
     const categoriesStr = Array.isArray(categories)
       ? categories.join(',')
-      : (typeof categories === 'string' ? categories : '');
+      : typeof categories === 'string'
+        ? categories
+        : '';
 
     const keywordsStr = Array.isArray(keywords)
       ? keywords.join(',')
-      : (typeof keywords === 'string' ? keywords : '');
+      : typeof keywords === 'string'
+        ? keywords
+        : '';
 
-    // Parse structuredData safely
     let parsedStructuredData = null;
     if (structuredData) {
       try {
-        parsedStructuredData = typeof structuredData === 'string'
-          ? JSON.parse(structuredData)
-          : JSON.stringify(structuredData);
+        parsedStructuredData =
+          typeof structuredData === 'string'
+            ? JSON.parse(structuredData)
+            : JSON.stringify(structuredData);
       } catch (_) {
         parsedStructuredData = String(structuredData);
       }
     }
 
+    // Default new posts to Draft unless explicitly published (T11)
+    const statusFields = buildStatusFields(status ?? POST_STATUS.DRAFT, {
+      published_date,
+    });
+
     const post = await prisma.post.create({
       data: {
         title,
         slug,
-        excerpt:         excerpt         || null,
+        excerpt: excerpt || null,
         content,
-        coverImage:      thumbnailUrl    || null,
-        status:          status          || 'published',
-        featured:        featured === true || featured === 'true',
-        category:        finalCategory,
-        categories:      categoriesStr   || null,
-        tags:            tags            || [],
-        keywords:        keywordsStr     || null,
-        metaTitle:       metaTitle       || null,
+        coverImage: thumbnailUrl || null,
+        status: statusFields.status,
+        isPublished: statusFields.isPublished,
+        featured: featured === true || featured === 'true',
+        category: finalCategory,
+        categories: categoriesStr || null,
+        tags: tags || [],
+        keywords: keywordsStr || null,
+        metaTitle: metaTitle || null,
         metaDescription: metaDescription || null,
-        canonicalUrl:    canonicalUrl    || null,
-        structuredData:  parsedStructuredData,
-        showToc:         showToc === true || showToc === 'true',
-        allowComments:   allowComments === true || allowComments === 'true',
-        authorId:        resolvedAuthorId,
-        publishedAt:     published_date ? new Date(published_date) : new Date(),
+        canonicalUrl: canonicalUrl || null,
+        structuredData: parsedStructuredData,
+        showToc: showToc === true || showToc === 'true' || show_toc === true || show_toc === 'true',
+        allowComments: allowCommentsValue,
+        authorId: resolvedAuthorId,
+        siteId: req.siteId,
+        publishedAt: statusFields.publishedAt,
       },
       include: {
-        author: { select: { id: true, email: true } }
-      }
+        author: { select: { id: true, email: true, name: true, avatar: true } },
+      },
     });
 
     res.status(201).json({ message: 'Post created successfully', ...formatPostData(post) });
   } catch (error) {
     console.error('Error creating post:', error);
     if (error.code === 'P2002') {
-      return res.status(400).json({ error: 'A post with this URL slug already exists.' });
+      return res
+        .status(400)
+        .json({ error: 'A post with this URL slug already exists on this site.' });
     }
     res.status(500).json({ error: 'Failed to create post.', message: error.message });
   }
 };
 
-// Get all posts (filtered by user unless admin)
+// Get all posts for the current site
 exports.getPosts = async (req, res) => {
   try {
     const { category, limit, status } = req.query;
     const userId = req.user.id;
     const userRole = req.user.role;
-    
-    const where = {};
+
+    const where = {
+      siteId: req.siteId,
+    };
+
     if (category) where.category = category;
-    if (status)   where.status = status;
+    if (status) where.status = status;
     if (req.query.featured !== undefined) {
       where.featured = req.query.featured === 'true';
     }
 
-    // Filter by user unless admin
-    if (userRole?.toLowerCase() !== 'admin') {
+    // Non-admins: only their posts within the site (authors)
+    // Site OWNER/EDITOR see all site posts; platform admin sees all site posts
+    const siteRole = String(req.siteRole || '').toUpperCase();
+    const canSeeAllOnSite =
+      isPlatformAdmin(userRole) || siteRole === 'OWNER' || siteRole === 'EDITOR';
+
+    if (!canSeeAllOnSite) {
       where.authorId = userId;
     }
 
@@ -134,16 +241,16 @@ exports.getPosts = async (req, res) => {
       where,
       include: {
         author: {
-          select: { id: true, email: true }
-        }
+          select: { id: true, email: true, name: true, avatar: true },
+        },
       },
       take: limit ? parseInt(limit, 10) : undefined,
       orderBy: {
-        createdAt: 'desc'
-      }
+        createdAt: 'desc',
+      },
     });
 
-    const formattedPosts = posts.map(post => formatPostData(post));
+    const formattedPosts = posts.map((post) => formatPostData(post));
     res.status(200).json(formattedPosts);
   } catch (error) {
     console.error('Error fetching posts:', error);
@@ -151,49 +258,94 @@ exports.getPosts = async (req, res) => {
   }
 };
 
-// Get single post by ID
+// Get single post by ID (must belong to current site)
 exports.getPostById = async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user.id;
     const userRole = req.user.role;
 
-    const post = await prisma.post.findUnique({
-      where: { id: parseInt(id, 10) },
+    const post = await prisma.post.findFirst({
+      where: {
+        id: parseInt(id, 10),
+        siteId: req.siteId,
+      },
       include: {
-        author: { select: { id: true, email: true } }
-      }
+        author: { select: { id: true, email: true, name: true, avatar: true } },
+      },
     });
 
     if (!post) {
       return res.status(404).json({ error: 'Post not found.' });
     }
 
-    // Ownership check
-    if (userRole?.toLowerCase() !== 'admin' && post.authorId !== userId) {
+    const siteRole = String(req.siteRole || '').toUpperCase();
+    const canSeeAllOnSite =
+      isPlatformAdmin(userRole) || siteRole === 'OWNER' || siteRole === 'EDITOR';
+
+    if (!canSeeAllOnSite && post.authorId !== userId) {
       return res.status(403).json({ error: 'Access denied. This post does not belong to you.' });
     }
 
-    const formattedPost = formatPostData(post);
-    res.status(200).json(formattedPost);
+    res.status(200).json(formatPostData(post));
   } catch (error) {
     console.error('Error fetching post:', error);
     res.status(500).json({ error: 'Failed to fetch post.', message: error.message });
   }
 };
 
-// Get single post by slug
+// Public: get single post by slug — T15: require siteId to avoid cross-tenant slug leaks
 exports.getPostBySlug = async (req, res) => {
   try {
     const { slug } = req.params;
-    const post = await prisma.post.findUnique({
-      where: { slug },
+
+    // Multi-tenant: site scope is required for public post resolution
+    if (!req.siteId) {
+      return res.status(400).json({
+        error: 'siteId is required (X-Site-Id header or ?siteId=).',
+      });
+    }
+
+    const where = { slug, siteId: req.siteId };
+
+    let post = await prisma.post.findFirst({
+      where,
       include: {
-        author: { select: { id: true, email: true } }
-      }
+        author: { select: { id: true, email: true, name: true, avatar: true } },
+      },
     });
 
+    // Fallback: normalize slug characters
+    if (!post && slug) {
+      try {
+        const decodedSlug = decodeURIComponent(slug);
+        const normalizedSlug = decodedSlug
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/(^-|-$)+/g, '');
+
+        if (normalizedSlug && normalizedSlug !== slug) {
+          post = await prisma.post.findFirst({
+            where: {
+              slug: normalizedSlug,
+              siteId: req.siteId,
+            },
+            include: {
+              author: { select: { id: true, email: true, name: true, avatar: true } },
+            },
+          });
+        }
+      } catch (err) {
+        console.error('Error decoding/normalizing slug:', err);
+      }
+    }
+
     if (!post) {
+      return res.status(404).json({ error: 'Post not found.' });
+    }
+
+    // Public slug endpoint: drafts / unpublished must not be readable (T11/T15)
+    if (!isLiveStatus(post.status) && post.isPublished !== true) {
       return res.status(404).json({ error: 'Post not found.' });
     }
 
@@ -204,7 +356,7 @@ exports.getPostBySlug = async (req, res) => {
   }
 };
 
-// Update a post
+// Update a post (same site only)
 exports.updatePost = async (req, res) => {
   try {
     const { id } = req.params;
@@ -221,74 +373,222 @@ exports.updatePost = async (req, res) => {
       featured,
       published_date,
       showToc,
-      allowComments
+      show_toc,
+      allowComments,
+      allow_comments,
     } = req.body;
     const userId = req.user.id;
     const userRole = req.user.role;
 
-    const finalCategory = category || (Array.isArray(categories) && categories.length > 0 ? categories[0] : undefined);
+    const allowCommentsUpdate =
+      allowComments !== undefined ? allowComments : allow_comments;
+    const showTocUpdate = showToc !== undefined ? showToc : show_toc;
 
-    // Check existence and ownership first
-    const existingPost = await prisma.post.findUnique({
-      where: { id: parseInt(id, 10) }
+    const finalCategory =
+      category ||
+      (Array.isArray(categories) && categories.length > 0 ? categories[0] : undefined);
+
+    const existingPost = await prisma.post.findFirst({
+      where: {
+        id: parseInt(id, 10),
+        siteId: req.siteId,
+      },
     });
 
     if (!existingPost) return res.status(404).json({ error: 'Post not found.' });
 
-    if (userRole?.toLowerCase() !== 'admin' && existingPost.authorId !== userId) {
+    if (!canManagePost(existingPost, userId, userRole, req.siteRole)) {
       return res.status(403).json({ error: 'Access denied. You can only update your own posts.' });
+    }
+
+    if (!assertSameSite(existingPost.siteId, req.siteId)) {
+      return res.status(403).json({ error: 'Access denied. Cross-site update blocked.' });
+    }
+
+    // coverImage: prefer short URL (/uploads/...). Base64 data-URLs are allowed
+    // after Text migration but still discouraged (huge payloads).
+    let coverImage = thumbnailUrl;
+    if (coverImage === '') coverImage = null;
+    if (
+      typeof coverImage === 'string' &&
+      coverImage.startsWith('data:') &&
+      coverImage.length > 2_000_000
+    ) {
+      return res.status(400).json({
+        error:
+          'Cover image is too large. Upload via Media Library so the post stores a short /uploads/... URL.',
+      });
+    }
+
+    const data = {
+      ...(title !== undefined && { title }),
+      ...(slug !== undefined && { slug }),
+      ...(excerpt !== undefined && { excerpt }),
+      ...(content !== undefined && { content }),
+      ...(thumbnailUrl !== undefined && { coverImage }),
+      ...(finalCategory !== undefined && { category: finalCategory }),
+      ...(tags !== undefined && {
+        tags: Array.isArray(tags)
+          ? tags
+          : typeof tags === 'string'
+            ? tags.split(',').map((t) => t.trim()).filter(Boolean)
+            : [],
+      }),
+      ...(featured !== undefined && { featured: featured === true || featured === 'true' }),
+      ...(showTocUpdate !== undefined && {
+        showToc: showTocUpdate === true || showTocUpdate === 'true',
+      }),
+      ...(allowCommentsUpdate !== undefined && {
+        allowComments:
+          allowCommentsUpdate === true || allowCommentsUpdate === 'true',
+      }),
+    };
+
+    if (status !== undefined) {
+      Object.assign(
+        data,
+        buildStatusFields(status, {
+          previousPublishedAt: existingPost.publishedAt,
+          published_date,
+        })
+      );
+    } else if (published_date !== undefined) {
+      data.publishedAt = new Date(published_date);
     }
 
     const post = await prisma.post.update({
       where: { id: parseInt(id, 10) },
-      data: {
-        ...(title        !== undefined && { title }),
-        ...(slug         !== undefined && { slug }),
-        ...(excerpt      !== undefined && { excerpt }),
-        ...(content      !== undefined && { content }),
-        ...(status       !== undefined && { status }),
-        ...(thumbnailUrl !== undefined && { coverImage: thumbnailUrl }),
-        ...(finalCategory !== undefined && { category: finalCategory }),
-        ...(tags         !== undefined && { tags }),
-        ...(featured     !== undefined && { featured: featured === true || featured === 'true' }),
-        ...(published_date !== undefined && { publishedAt: new Date(published_date) }),
-        ...(showToc       !== undefined && { showToc: showToc === true || showToc === 'true' }),
-        ...(allowComments !== undefined && { allowComments: allowComments === true || allowComments === 'true' }),
-      },
+      data,
       include: {
-        author: { select: { id: true, email: true } }
-      }
+        author: { select: { id: true, email: true, name: true, avatar: true } },
+      },
     });
 
     res.status(200).json({ message: 'Post updated successfully', post: formatPostData(post) });
   } catch (error) {
     console.error('Error updating post:', error);
     if (error.code === 'P2002') {
-      return res.status(400).json({ error: 'A post with this URL slug already exists.' });
+      return res
+        .status(400)
+        .json({ error: 'A post with this URL slug already exists on this site.' });
     }
     res.status(500).json({ error: 'Failed to update post.', message: error.message });
   }
 };
 
-// Delete a post
+/**
+ * T11: Publish post — status Published, visible on public site.
+ * PATCH /api/posts/:id/publish
+ */
+exports.publishPost = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    const existingPost = await prisma.post.findFirst({
+      where: { id: parseInt(id, 10), siteId: req.siteId },
+    });
+
+    if (!existingPost) return res.status(404).json({ error: 'Post not found.' });
+    if (!canManagePost(existingPost, userId, userRole, req.siteRole)) {
+      return res.status(403).json({ error: 'Access denied.' });
+    }
+
+    const statusFields = buildStatusFields(POST_STATUS.PUBLISHED, {
+      previousPublishedAt: existingPost.publishedAt,
+    });
+
+    const post = await prisma.post.update({
+      where: { id: existingPost.id },
+      data: statusFields,
+      include: {
+        author: { select: { id: true, email: true, name: true, avatar: true } },
+      },
+    });
+
+    res.status(200).json({
+      message: 'Post published successfully',
+      post: formatPostData(post),
+    });
+  } catch (error) {
+    console.error('Error publishing post:', error);
+    res.status(500).json({ error: 'Failed to publish post.', message: error.message });
+  }
+};
+
+/**
+ * T11: Unpublish post — status Draft (or Unpublished), hidden from public site.
+ * PATCH /api/posts/:id/unpublish
+ * Body optional: { status: "Draft" | "Unpublished" }
+ */
+exports.unpublishPost = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+    const target =
+      req.body?.status && String(req.body.status).toLowerCase() === 'unpublished'
+        ? POST_STATUS.UNPUBLISHED
+        : POST_STATUS.DRAFT;
+
+    const existingPost = await prisma.post.findFirst({
+      where: { id: parseInt(id, 10), siteId: req.siteId },
+    });
+
+    if (!existingPost) return res.status(404).json({ error: 'Post not found.' });
+    if (!canManagePost(existingPost, userId, userRole, req.siteRole)) {
+      return res.status(403).json({ error: 'Access denied.' });
+    }
+
+    const statusFields = buildStatusFields(target, {
+      previousPublishedAt: existingPost.publishedAt,
+    });
+
+    const post = await prisma.post.update({
+      where: { id: existingPost.id },
+      data: statusFields,
+      include: {
+        author: { select: { id: true, email: true, name: true, avatar: true } },
+      },
+    });
+
+    res.status(200).json({
+      message: 'Post unpublished successfully',
+      post: formatPostData(post),
+    });
+  } catch (error) {
+    console.error('Error unpublishing post:', error);
+    res.status(500).json({ error: 'Failed to unpublish post.', message: error.message });
+  }
+};
+
+// Delete a post (same site only)
 exports.deletePost = async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user.id;
     const userRole = req.user.role;
 
-    const existingPost = await prisma.post.findUnique({
-      where: { id: parseInt(id, 10) }
+    const existingPost = await prisma.post.findFirst({
+      where: {
+        id: parseInt(id, 10),
+        siteId: req.siteId,
+      },
     });
 
     if (!existingPost) return res.status(404).json({ error: 'Post not found.' });
 
-    if (userRole?.toLowerCase() !== 'admin' && existingPost.authorId !== userId) {
+    const siteRole = String(req.siteRole || '').toUpperCase();
+    const canManageAll =
+      isPlatformAdmin(userRole) || siteRole === 'OWNER' || siteRole === 'EDITOR';
+
+    if (!canManageAll && existingPost.authorId !== userId) {
       return res.status(403).json({ error: 'Access denied. You can only delete your own posts.' });
     }
 
     await prisma.post.delete({
-      where: { id: parseInt(id, 10) }
+      where: { id: parseInt(id, 10) },
     });
 
     res.status(200).json({ message: 'Post deleted successfully' });

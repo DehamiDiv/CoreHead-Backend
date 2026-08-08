@@ -1,167 +1,156 @@
 const templateRepo = require('../repositories/templateRepository');
 const { validateLayoutJson } = require('../utils/layoutValidator');
+const { isPlatformAdmin } = require('../utils/siteScope');
 
-const createTemplate = async (authorId, templateData) => {
-    const { name, type, layoutJson, category, status } = templateData;
-
-    // 1. Basic validation (Ensure required fields)
-    if (!name || !type || !layoutJson) {
-        throw new Error("Missing required template fields (name, type, layoutJson)");
-    }
-
-    // 2. Validate Layout specific structures (e.g., Blog Loop safety)
-    validateLayoutJson(layoutJson);
-
-    // 3. Pass data to Repository
-    return await templateRepo.createTemplate({
-        name,
-        type,
-        layoutJson,
-        category,
-        status: status || 'draft', // Default to draft if not provided
-        authorId
+const assertSiteTemplateAccess = (template, siteId, userId, userRole) => {
+  if (!template) {
+    throw Object.assign(new Error('Template not found'), { statusCode: 404 });
+  }
+  if (siteId != null && template.siteId != null && Number(template.siteId) !== Number(siteId)) {
+    throw Object.assign(new Error('Access denied. Template belongs to another site.'), {
+      statusCode: 403,
     });
+  }
+  if (!isPlatformAdmin(userRole) && template.authorId !== userId) {
+    // Site owners/editors can still manage via site role in controller layer if needed;
+    // keep author check for non-admins as before, unless template is on their site.
+    if (siteId == null || Number(template.siteId) !== Number(siteId)) {
+      throw Object.assign(
+        new Error('Access denied. This template does not belong to you.'),
+        { statusCode: 403 }
+      );
+    }
+  }
 };
 
-const getTemplates = async (userId, userRole) => {
-    // If Admin, show all. If regular User, only show their own.
-    if (userRole?.toLowerCase() === 'admin') {
-        return await templateRepo.getAllTemplates();
-    } else {
-        // We need a way to filter in repo, or filter here. 
-        // For simplicity, let's filter here but ideally it should be in the repository.
-        const allTemplates = await templateRepo.getAllTemplates();
-        return allTemplates.filter(t => t.authorId === userId);
-    }
+const createTemplate = async (authorId, templateData, siteId) => {
+  const { name, type, layoutJson, category, status } = templateData;
+
+  if (!name || !type || !layoutJson) {
+    throw new Error('Missing required template fields (name, type, layoutJson)');
+  }
+  if (!siteId) {
+    throw new Error('Site context required (X-Site-Id)');
+  }
+
+  validateLayoutJson(layoutJson);
+
+  return await templateRepo.createTemplate({
+    name,
+    type,
+    layoutJson,
+    category,
+    status: status || 'draft',
+    authorId,
+    siteId,
+  });
 };
 
-const getTemplateById = async (id, userId, userRole) => {
-    const template = await templateRepo.getTemplateById(id);
-    if (!template) return null;
+const getTemplates = async (userId, userRole, siteId) => {
+  if (!siteId) {
+    throw new Error('Site context required (X-Site-Id)');
+  }
 
-    // Check ownership if not admin
-    if (userRole?.toLowerCase() !== 'admin' && template.authorId !== userId) {
-        throw new Error("Access denied. This template does not belong to you.");
-    }
+  const templates = await templateRepo.getAllTemplates(siteId);
 
-    return template;
+  if (isPlatformAdmin(userRole)) {
+    return templates;
+  }
+
+  // Within a site, show all site templates to members (builder collaboration)
+  return templates;
 };
 
-const updateTemplate = async (id, templateData, userId, userRole) => {
-    // 1. Fetch current template before updating
-    const currentTemplate = await templateRepo.getTemplateById(id);
-    if (!currentTemplate) {
-        throw new Error("Template not found");
-    }
+const getTemplateById = async (id, userId, userRole, siteId) => {
+  const template = await templateRepo.getTemplateById(id, siteId);
+  if (!template) return null;
+  assertSiteTemplateAccess(template, siteId, userId, userRole);
+  return template;
+};
 
-    // Check ownership if not admin
-    if (userRole?.toLowerCase() !== 'admin' && currentTemplate.authorId !== userId) {
-        throw new Error("Access denied. You can only update your own templates.");
-    }
+const updateTemplate = async (id, templateData, userId, userRole, siteId) => {
+  const currentTemplate = await templateRepo.getTemplateById(id, siteId);
+  assertSiteTemplateAccess(currentTemplate, siteId, userId, userRole);
 
-    // 0. Validate incoming Layout changes
-    if (templateData.layoutJson) {
-        validateLayoutJson(templateData.layoutJson);
-    }
+  if (templateData.layoutJson) {
+    validateLayoutJson(templateData.layoutJson);
+  }
 
-    // 2. Save current state to history
-    await templateRepo.saveTemplateHistory(
-        currentTemplate.id,
-        currentTemplate.version,
-        currentTemplate.layoutJson,
-        userId
+  await templateRepo.saveTemplateHistory(
+    currentTemplate.id,
+    currentTemplate.version,
+    currentTemplate.layoutJson,
+    userId
+  );
+
+  const nextVersion = currentTemplate.version + 1;
+  return await templateRepo.updateTemplate(id, templateData, nextVersion);
+};
+
+const deleteTemplate = async (id, userId, userRole, siteId) => {
+  const currentTemplate = await templateRepo.getTemplateById(id, siteId);
+  assertSiteTemplateAccess(currentTemplate, siteId, userId, userRole);
+  return await templateRepo.deleteTemplate(id);
+};
+
+const publishTemplate = async (id, userId, userRole, siteId) => {
+  const template = await templateRepo.getTemplateById(id, siteId);
+  assertSiteTemplateAccess(template, siteId, userId, userRole);
+
+  if (!template.layoutJson) {
+    throw new Error('Cannot publish a template without a layoutJson');
+  }
+  return await templateRepo.publishTemplate(id);
+};
+
+const assignTemplate = async (id, assignData, userRole, siteId) => {
+  if (!isPlatformAdmin(userRole) && !siteId) {
+    throw new Error('Access denied. Only admins can assign templates without site context.');
+  }
+
+  const { categoryId, isGlobalDefault } = assignData;
+  const template = await templateRepo.getTemplateById(id, siteId);
+  if (!template) {
+    throw new Error('Template not found');
+  }
+  if (template.status !== 'published') {
+    throw new Error('Only published templates can be assigned');
+  }
+
+  return await templateRepo.assignTemplate(id, categoryId, isGlobalDefault, siteId);
+};
+
+const resolveActiveLayout = async (templateType, categoryId, siteId = null) => {
+  if (!templateType) {
+    throw new Error('templateType query parameter is required');
+  }
+
+  const layout = await templateRepo.resolveActiveLayout(
+    templateType,
+    categoryId || null,
+    siteId != null && siteId !== '' ? Number(siteId) : null
+  );
+
+  if (!layout) {
+    // Return null-friendly error for API; frontend falls back to default UI
+    const err = new Error(
+      `No active layout found for type "${templateType}"` +
+        (categoryId ? ` and category "${categoryId}"` : '')
     );
+    err.statusCode = 404;
+    throw err;
+  }
 
-    // 3. Increment version and save new updates
-    const nextVersion = currentTemplate.version + 1;
-    return await templateRepo.updateTemplate(id, templateData, nextVersion);
-};
-
-const deleteTemplate = async (id, userId, userRole) => {
-    const currentTemplate = await templateRepo.getTemplateById(id);
-    if (!currentTemplate) {
-        throw new Error("Template not found");
-    }
-
-    // Check ownership if not admin
-    if (userRole?.toLowerCase() !== 'admin' && currentTemplate.authorId !== userId) {
-        throw new Error("Access denied. You can only delete your own templates.");
-    }
-
-    return await templateRepo.deleteTemplate(id);
-};
-
-// ─── MY CONTRIBUTION: Publish / Assign / Resolve ─────────────────────────────
-
-/**
- * Publish a template.
- */
-const publishTemplate = async (id, userId, userRole) => {
-    const template = await templateRepo.getTemplateById(id);
-    if (!template) {
-        throw new Error('Template not found');
-    }
-
-    // Check ownership if not admin
-    if (userRole?.toLowerCase() !== 'admin' && template.authorId !== userId) {
-        throw new Error("Access denied. You can only publish your own templates.");
-    }
-
-    if (!template.layoutJson) {
-        throw new Error('Cannot publish a template without a layoutJson');
-    }
-    return await templateRepo.publishTemplate(id);
-};
-
-/**
- * Assign a template to a category.
- * Only Admins should be able to assign global/category templates for the whole site.
- */
-const assignTemplate = async (id, assignData, userRole) => {
-    if (userRole?.toLowerCase() !== 'admin') {
-        throw new Error("Access denied. Only admins can assign templates to categories or site-wide defaults.");
-    }
-
-    const { categoryId, isGlobalDefault } = assignData;
-
-    const template = await templateRepo.getTemplateById(id);
-    if (!template) {
-        throw new Error('Template not found');
-    }
-    if (template.status !== 'published') {
-        throw new Error('Only published templates can be assigned');
-    }
-
-    return await templateRepo.assignTemplate(id, categoryId, isGlobalDefault);
-};
-
-/**
- * Resolve the active layout (Public)
- */
-const resolveActiveLayout = async (templateType, categoryId) => {
-    if (!templateType) {
-        throw new Error('templateType query parameter is required');
-    }
-
-    const layout = await templateRepo.resolveActiveLayout(templateType, categoryId);
-
-    if (!layout) {
-        throw new Error(
-            `No active layout found for type "${templateType}"` +
-            (categoryId ? ` and category "${categoryId}"` : '')
-        );
-    }
-
-    return layout;
+  return layout;
 };
 
 module.exports = {
-    createTemplate,
-    getTemplates,
-    getTemplateById,
-    updateTemplate,
-    deleteTemplate,
-    publishTemplate,
-    assignTemplate,
-    resolveActiveLayout
+  createTemplate,
+  getTemplates,
+  getTemplateById,
+  updateTemplate,
+  deleteTemplate,
+  publishTemplate,
+  assignTemplate,
+  resolveActiveLayout,
 };
