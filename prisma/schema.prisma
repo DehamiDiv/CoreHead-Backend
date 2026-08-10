@@ -361,3 +361,14 @@ model Setting {
   @@index([siteId], map: "idx_settings_site")
   @@map("settings")
 }
+
+model DemoRequest {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String
+  company   String?
+  message   String?
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+
+  @@map("demo_requests")
+}
