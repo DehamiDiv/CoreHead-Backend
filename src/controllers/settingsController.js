@@ -1,4 +1,26 @@
 const prisma = require('../models/prismaClient');
+const {
+  applyAppearanceDraft,
+  saveAppearanceDraft,
+} = require('../services/appearanceDraftService');
+
+exports.saveAppearanceDraft = async (req, res) => {
+  try {
+    const draft = await saveAppearanceDraft(prisma, req.siteId, req.body);
+    res.status(200).json({ success: true, draft });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ success: false, message: error.message });
+  }
+};
+
+exports.applyAppearanceDraft = async (req, res) => {
+  try {
+    const draft = await applyAppearanceDraft(prisma, req.siteId, req.body);
+    res.status(200).json({ success: true, draft });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ success: false, message: error.message });
+  }
+};
 
 exports.getSettings = async (req, res) => {
   try {

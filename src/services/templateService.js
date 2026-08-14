@@ -1,6 +1,9 @@
 const templateRepo = require('../repositories/templateRepository');
-const { validateLayoutJson } = require('../utils/layoutValidator');
 const { isPlatformAdmin } = require('../utils/siteScope');
+const {
+  assertAssignableTemplate,
+  prepareTemplateLayout,
+} = require('../contracts/templateLayout');
 
 const assertSiteTemplateAccess = (template, siteId, userId, userRole) => {
   if (!template) {
@@ -33,12 +36,17 @@ const createTemplate = async (authorId, templateData, siteId) => {
     throw new Error('Site context required (X-Site-Id)');
   }
 
-  validateLayoutJson(layoutJson);
+  const prepared = prepareTemplateLayout(layoutJson, {
+    name,
+    type,
+    status: status || 'draft',
+    origin: 'manual',
+  });
 
   return await templateRepo.createTemplate({
     name,
     type,
-    layoutJson,
+    layoutJson: prepared.layoutJson,
     category,
     status: status || 'draft',
     authorId,
@@ -72,9 +80,18 @@ const updateTemplate = async (id, templateData, userId, userRole, siteId) => {
   const currentTemplate = await templateRepo.getTemplateById(id, siteId);
   assertSiteTemplateAccess(currentTemplate, siteId, userId, userRole);
 
-  if (templateData.layoutJson) {
-    validateLayoutJson(templateData.layoutJson);
-  }
+  const nextName = templateData.name || currentTemplate.name;
+  const nextType = templateData.type || currentTemplate.type;
+  const nextStatus = templateData.status || currentTemplate.status;
+  const prepared = prepareTemplateLayout(
+    templateData.layoutJson || currentTemplate.layoutJson,
+    {
+      name: nextName,
+      type: nextType,
+      status: nextStatus,
+      origin: currentTemplate.layoutJson?.metadata?.origin || 'manual',
+    }
+  );
 
   await templateRepo.saveTemplateHistory(
     currentTemplate.id,
@@ -84,7 +101,11 @@ const updateTemplate = async (id, templateData, userId, userRole, siteId) => {
   );
 
   const nextVersion = currentTemplate.version + 1;
-  return await templateRepo.updateTemplate(id, templateData, nextVersion);
+  return await templateRepo.updateTemplate(
+    id,
+    { ...templateData, layoutJson: prepared.layoutJson },
+    nextVersion
+  );
 };
 
 const deleteTemplate = async (id, userId, userRole, siteId) => {
@@ -100,7 +121,13 @@ const publishTemplate = async (id, userId, userRole, siteId) => {
   if (!template.layoutJson) {
     throw new Error('Cannot publish a template without a layoutJson');
   }
-  return await templateRepo.publishTemplate(id);
+  const prepared = prepareTemplateLayout(template.layoutJson, {
+    name: template.name,
+    type: template.type,
+    status: 'published',
+    origin: template.layoutJson?.metadata?.origin || 'manual',
+  });
+  return await templateRepo.publishTemplate(id, prepared.layoutJson);
 };
 
 const assignTemplate = async (id, assignData, userRole, siteId) => {
@@ -113,9 +140,7 @@ const assignTemplate = async (id, assignData, userRole, siteId) => {
   if (!template) {
     throw new Error('Template not found');
   }
-  if (template.status !== 'published') {
-    throw new Error('Only published templates can be assigned');
-  }
+  assertAssignableTemplate(template);
 
   return await templateRepo.assignTemplate(id, categoryId, isGlobalDefault, siteId);
 };

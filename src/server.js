@@ -2,9 +2,6 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const { PrismaClient } = require('@prisma/client');
-
-const prisma = new PrismaClient();
 
 // ── Routes ──
 const authRoutes     = require('./routes/authRoutes');
@@ -41,92 +38,6 @@ app.get('/', (req, res) => {
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Server is running' });
-});
-
-// ── Preview Posts — public, site-scoped only (T15: no cross-tenant dump)
-// Requires ?siteId= or X-Site-Id. Only Published posts for that site.
-app.get('/api/preview/posts', async (req, res) => {
-  try {
-    const limit = parseInt(req.query.limit) || 3;
-    const rawSiteId = req.headers['x-site-id'] || req.query.siteId;
-    const siteId = rawSiteId ? parseInt(String(rawSiteId), 10) : null;
-
-    if (!siteId || !Number.isFinite(siteId)) {
-      return res.status(400).json({
-        success: false,
-        error: 'siteId is required (X-Site-Id header or ?siteId=).',
-        posts: [],
-      });
-    }
-
-    // Ensure site is active (do not leak inactive tenant content)
-    const site = await prisma.site.findUnique({ where: { id: siteId } });
-    if (!site || (site.status && String(site.status).toLowerCase() !== 'active')) {
-      return res.status(404).json({
-        success: false,
-        error: 'Site not found.',
-        posts: [],
-      });
-    }
-
-    const where = {
-      siteId,
-      OR: [
-        { status: { in: ['Published', 'published'] } },
-        { isPublished: true },
-      ],
-    };
-
-    const posts = await prisma.post.findMany({
-      take: limit,
-      where,
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id:         true,
-        title:      true,
-        slug:       true,
-        excerpt:    true,
-        coverImage: true,
-        category:   true,
-        status:     true,
-        isPublished: true,
-        siteId:     true,
-        createdAt:  true,
-        author: {
-          select: { id: true, email: true, name: true }
-        }
-      }
-    });
-
-    // Defense in depth: only live statuses
-    const live = posts.filter(
-      (p) =>
-        p.isPublished === true ||
-        String(p.status || '').toLowerCase() === 'published'
-    );
-
-    const postsWithAuthor = live.map((post) => ({
-      ...post,
-      thumbnailUrl:   post.coverImage || null,
-      featured_image: post.coverImage || null,
-      published_date: post.createdAt,
-      author_name:    post.author?.name || post.author?.email || null,
-      author_avatar:  null,
-      tags:           [],
-    }));
-
-    return res.status(200).json({
-      success: true,
-      posts: postsWithAuthor
-    });
-
-  } catch (error) {
-    console.error('Preview posts error:', error);
-    return res.status(500).json({
-      error: 'Failed to fetch preview posts',
-      message: error.message
-    });
-  }
 });
 
 // ── Bindings — called by friend's frontend ──

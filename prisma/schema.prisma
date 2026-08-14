@@ -16,10 +16,13 @@ model ai_layouts {
   design_style     String?   @db.VarChar(50)
   features         Json?
   generated_layout Json
+  promoted_template_id Int?      @unique
   created_at       DateTime? @default(now()) @db.Timestamp(6)
   site             Site?     @relation(fields: [site_id], references: [id], onDelete: Cascade)
+  promoted_template templates? @relation("AiLayoutPromotion", fields: [promoted_template_id], references: [id], onDelete: SetNull)
 
   @@index([site_id], map: "idx_ai_layouts_site")
+  @@index([promoted_template_id], map: "idx_ai_layouts_promoted_template")
 }
 
 model authors {
@@ -192,6 +195,7 @@ model templates {
   author     User              @relation(fields: [authorId], references: [id])
   site       Site?             @relation(fields: [siteId], references: [id], onDelete: Cascade)
   history    TemplateHistory[]
+  aiLayoutSource ai_layouts?     @relation("AiLayoutPromotion")
 
   @@index([siteId], map: "idx_templates_site")
   @@map("Template")

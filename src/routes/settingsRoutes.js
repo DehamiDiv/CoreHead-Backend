@@ -10,6 +10,9 @@ router.use(requireSite);
 // GET /api/settings
 router.get('/', settingsController.getSettings);
 
+router.put('/appearance/draft', settingsController.saveAppearanceDraft);
+router.put('/appearance/apply', settingsController.applyAppearanceDraft);
+
 // PUT /api/settings/:key
 router.put('/:key', settingsController.updateSetting);
 

@@ -59,10 +59,10 @@ const deleteTemplate = async (id) => {
   });
 };
 
-const publishTemplate = async (id) => {
+const publishTemplate = async (id, layoutJson) => {
   return await prisma.templates.update({
     where: { id: parseInt(id, 10) },
-    data: { status: 'published' },
+    data: { status: 'published', ...(layoutJson ? { layoutJson } : {}) },
   });
 };
 

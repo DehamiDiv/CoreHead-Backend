@@ -30,28 +30,7 @@ const parseSettingValue = (raw) => {
 };
 
 const { mergeBranding } = require('../utils/themePresets');
-
-/** Extract homeStyle from home_layout setting (object or bare string). */
-const extractHomeStyle = (homeLayoutRaw) => {
-  if (homeLayoutRaw == null || homeLayoutRaw === '') return null;
-  if (typeof homeLayoutRaw === 'string') {
-    const s = homeLayoutRaw.trim();
-    if (!s) return null;
-    // Bare layout id: "bloom"
-    if (!s.startsWith('{') && !s.startsWith('[')) return s;
-    try {
-      const parsed = JSON.parse(s);
-      return extractHomeStyle(parsed);
-    } catch {
-      return s;
-    }
-  }
-  if (typeof homeLayoutRaw === 'object') {
-    const style = homeLayoutRaw.homeStyle || homeLayoutRaw.layout || null;
-    return style != null && style !== '' ? String(style) : null;
-  }
-  return null;
-};
+const { extractHomeStyle } = require('../../../contracts/appearance-model-v1');
 
 const loadPublicBranding = async (siteId) => {
   try {

@@ -1,22 +1,70 @@
 const { Groq } = require('groq-sdk');
-const { z } = require('zod');
 const { randomUUID } = require('crypto');
+const {
+  layoutDocumentV1Schema,
+  normalizeLayoutDocumentV1,
+  validateLayoutDocumentV1,
+} = require('../contracts/layoutContract');
+const { templateTypeToKind } = require('../contracts/templateLayout');
 
 // ─── Rule-based layout generator (fallback when no API key or error) ───
-function generateRuleBasedLayout(prompt) {
+function generateRuleBasedLayout(prompt, options = {}) {
   const lower = prompt.toLowerCase();
-
+  const kind = templateTypeToKind(options.layoutType || options.kind);
   const blocks = [];
   const id = () => randomUUID();
 
   // ── Extract a topic from the prompt ──
   const topic = prompt.length > 60 ? prompt.slice(0, 60) + '...' : prompt;
 
-  // 1. Always add a heading
+  if (kind === 'single-post') {
+    blocks.push(
+      {
+        id: id(),
+        type: 'Image',
+        content: '',
+        bindings: { content: 'post.coverImage' },
+        styles: { borderRadius: '12px', marginBottom: '30px' },
+      },
+      {
+        id: id(),
+        type: 'Heading',
+        content: '',
+        level: 1,
+        bindings: { content: 'post.title' },
+        styles: { textAlign: 'center', fontSize: '36px', marginBottom: '20px' },
+      },
+      {
+        id: id(),
+        type: 'Paragraph',
+        content: '',
+        bindings: { content: 'post.excerpt' },
+        styles: { textAlign: 'center', color: '#64748b', marginBottom: '30px' },
+      },
+      { id: id(), type: 'Divider', content: '', styles: { marginBottom: '30px' } },
+      {
+        id: id(),
+        type: 'Paragraph',
+        content: '',
+        bindings: { content: 'post.contentHtml' },
+        styles: { lineHeight: '1.75' },
+      },
+    );
+    return {
+      schemaVersion: '1.0',
+      kind,
+      name: options.name || `${toTitleCase(topic)} Post`,
+      blocks,
+      metadata: { designStyle: options.designStyle || 'modern', origin: 'ai' },
+    };
+  }
+
+  // Blog Archive fallback
   blocks.push({
     id: id(),
     type: 'Heading',
     content: toTitleCase(topic),
+    level: 1,
     styles: { textAlign: 'center', fontSize: '36px', marginBottom: '30px' },
   });
 
@@ -58,7 +106,7 @@ function generateRuleBasedLayout(prompt) {
     styles: { fontSize: '24px', marginBottom: '30px' },
   });
 
-  // 6. Collection List (always useful for a blog)
+  // 6. Collection List
   blocks.push({
     id: id(),
     type: 'Collection List',
@@ -86,7 +134,13 @@ function generateRuleBasedLayout(prompt) {
     });
   }
 
-  return blocks;
+  return {
+    schemaVersion: '1.0',
+    kind,
+    name: options.name || `${toTitleCase(topic)} Archive`,
+    blocks,
+    metadata: { designStyle: options.designStyle || 'modern', origin: 'ai' },
+  };
 }
 
 function toTitleCase(str) {
@@ -106,98 +160,166 @@ const getGroqClient = () => {
   return groqClient;
 };
 
-const aiService = {
-  async generateLayout(prompt) {
-    const GROQ_API_KEY = process.env.GROQ_API_KEY;
-    const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.1-8b-instant';
-
-    let blocks;
-    let isFallback = false;
-
-    if (!GROQ_API_KEY) {
-      console.warn('No GROQ_API_KEY found. Using rule-based fallback.');
-      blocks = generateRuleBasedLayout(prompt);
-      return { blocks, isFallback: true };
-    }
-
-    const groq = getGroqClient();
-    if (!groq) {
-      console.error('Groq client could not be initialized.');
-      blocks = generateRuleBasedLayout(prompt);
-      return { blocks, isFallback: true };
-    }
-
-    const systemPrompt = `
-You are a CMS layout generator for a blog platform called CoreHead.
-Given a user's description, generate a JSON object containing a "blocks" array.
-
-Each block MUST follow this exact schema:
-{
-  "id": "<unique string>",
-  "type": "<one of: Heading | Paragraph | Image | Quote | Divider | Button | Collection List>",
-  "content": <string for most types, { "text": string, "url": string } for Button, { "limit": number, "category": string } for Collection List>,
-  "styles": { <optional CSS-in-JS style properties> }
+function buildLayoutSystemPrompt(options = {}) {
+  const kind = templateTypeToKind(options.layoutType || options.kind);
+  const semanticRules = kind === 'single-post'
+    ? 'The document MUST contain bindings.content="post.title" and bindings.content="post.contentHtml". Use post.coverImage for a dynamic cover when an Image is included. Do not add a Collection List unless explicitly requested.'
+    : 'The document MUST contain at least one Collection List block with content.limit from 1 to 50 and a string content.category.';
+  return [
+    'You generate CoreHead CMS layouts.',
+    'Return exactly one JSON object and no markdown or explanation.',
+    `The requested kind is "${kind}". The root kind MUST match it.`,
+    `Use design style "${String(options.designStyle || 'modern')}".`,
+    `Requested optional features: ${JSON.stringify(options.features || {})}.`,
+    semanticRules,
+    'Use dynamic bindings for CMS values. Do not put {post.title} placeholder strings in content.',
+    'Use unique string IDs. parentId may only reference a Container or Columns block. Never emit scripts, event handlers, javascript: URLs, arbitrary CSS properties, or undocumented fields.',
+    'The following JSON Schema is the complete LayoutDocument v1 contract:',
+    JSON.stringify(layoutDocumentV1Schema),
+  ].join('\n');
 }
 
-Rules:
-- Always start with a Heading block as the page title
-- Use Paragraph blocks for descriptive text
-- Use Collection List block to show blog posts (type="Blog Archive" pages)
-- Use Image block for hero/banner images with a relevant Unsplash URL
-- Use Divider blocks to separate sections
-- Use Button blocks for CTAs
-- Generate 4-8 blocks total
-- Make content relevant to the user's prompt
-- IMPORTANT: Add { "marginBottom": "30px" } to the "styles" of EVERY block so they don't overlap and have proper spacing.
-- For Image blocks, use: https://images.unsplash.com/photo-1499750310107-5fef28a66643?w=1200&q=80
-- Return ONLY a valid JSON object with the "blocks" property. No markdown, no explanation.
+function completionText(completion) {
+  const text = completion?.choices?.[0]?.message?.content;
+  if (!text || typeof text !== 'string') {
+    throw new Error('Invalid response received from AI provider.');
+  }
+  return text;
+}
 
-User prompt: "${prompt}"
-`;
+function prepareAiLayoutResponse(rawText, options = {}) {
+  let parsed;
+  try {
+    parsed = typeof rawText === 'string' ? JSON.parse(rawText) : rawText;
+  } catch {
+    return {
+      layout: null,
+      validation: {
+        valid: false,
+        errors: [{ code: 'ai.invalid_json', path: '$', message: 'AI response is not valid JSON.' }],
+        warnings: [],
+      },
+    };
+  }
+
+  if (parsed?.layout && typeof parsed.layout === 'object') parsed = parsed.layout;
+  const kind = templateTypeToKind(options.layoutType || options.kind);
+  let normalized;
+  try {
+    normalized = normalizeLayoutDocumentV1(parsed, {
+      name: parsed?.name || options.name || (kind === 'blog-archive' ? 'AI Blog Archive' : 'AI Single Post'),
+      kind,
+      origin: 'ai',
+      designStyle: options.designStyle || 'modern',
+    });
+  } catch (error) {
+    return {
+      layout: null,
+      validation: {
+        valid: false,
+        errors: [{ code: 'ai.layout_shape', path: '$', message: error.message }],
+        warnings: [],
+      },
+    };
+  }
+  const layout = {
+    ...normalized.document,
+    kind,
+    name: String(normalized.document.name || options.name || 'AI Layout'),
+    metadata: {
+      ...normalized.document.metadata,
+      designStyle: options.designStyle || normalized.document.metadata?.designStyle || 'modern',
+      origin: 'ai',
+    },
+  };
+  const validation = validateLayoutDocumentV1(layout);
+  return {
+    layout,
+    validation: {
+      ...validation,
+      warnings: [...normalized.warnings, ...validation.warnings],
+    },
+  };
+}
+
+const aiService = {
+  async generateLayout(prompt, options = {}) {
+    const GROQ_API_KEY = process.env.GROQ_API_KEY;
+    const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.1-8b-instant';
+    const kind = templateTypeToKind(options.layoutType || options.kind);
+    const generationOptions = {
+      ...options,
+      kind,
+      layoutType: kind,
+      designStyle: options.designStyle || 'modern',
+    };
+    const makeFallback = () => {
+      const layout = generateRuleBasedLayout(prompt, generationOptions);
+      const validation = validateLayoutDocumentV1(layout);
+      if (!validation.valid) {
+        throw new Error(`Fallback layout failed validation: ${validation.errors.map((issue) => issue.message).join('; ')}`);
+      }
+      return { layout, blocks: layout.blocks, isFallback: true, provider: 'rule-based' };
+    };
+
+    if (!GROQ_API_KEY && !options.client) {
+      console.warn('No GROQ_API_KEY found. Using rule-based fallback.');
+      return makeFallback();
+    }
+
+    const groq = options.client || getGroqClient();
+    if (!groq) {
+      console.error('Groq client could not be initialized.');
+      return makeFallback();
+    }
+
+    const systemPrompt = buildLayoutSystemPrompt(generationOptions);
+    const userPrompt = `Create a ${kind} layout for this request:\n${prompt}`;
 
     // AbortController 20s timeout
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 20000);
 
     try {
-      const chatCompletion = await groq.chat.completions.create({
-        messages: [{ role: 'system', content: systemPrompt }],
+      const requestCompletion = async (messages) => groq.chat.completions.create({
+        messages,
         model: GROQ_MODEL,
         temperature: 0.2,
-        response_format: { type: "json_object" }
-      }, {
-        signal: controller.signal
-      });
+        response_format: { type: 'json_object' },
+      }, { signal: controller.signal });
 
-      if (!chatCompletion || !chatCompletion.choices || !chatCompletion.choices[0]) {
-        throw new Error('Invalid response received from AI provider.');
+      const firstCompletion = await requestCompletion([
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ]);
+      const firstText = completionText(firstCompletion);
+      let prepared = prepareAiLayoutResponse(firstText, generationOptions);
+
+      if (!prepared.validation.valid) {
+        const repairPrompt = [
+          'Repair the previous JSON so it conforms exactly to LayoutDocument v1.',
+          `Validation errors: ${JSON.stringify(prepared.validation.errors)}`,
+          `Previous JSON: ${firstText}`,
+          'Return only the corrected JSON object.',
+        ].join('\n');
+        const repairedCompletion = await requestCompletion([
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: repairPrompt },
+        ]);
+        prepared = prepareAiLayoutResponse(completionText(repairedCompletion), generationOptions);
       }
 
-      const text = chatCompletion.choices[0].message?.content || '{}';
-
-      let parsedResult;
-      try {
-        parsedResult = JSON.parse(text);
-      } catch (parseError) {
-        throw new Error('Failed to parse AI response as JSON.');
+      if (!prepared.validation.valid) {
+        console.warn('AI response failed canonical validation after repair. Using fallback.');
+        return makeFallback();
       }
 
-      const layoutSchema = z.object({
-        blocks: z.array(z.object({
-          id: z.string().optional(),
-          type: z.enum(['Heading', 'Paragraph', 'Image', 'Quote', 'Divider', 'Button', 'Collection List']),
-          content: z.any(),
-          styles: z.any().optional()
-        }))
-      });
-
-      const validation = layoutSchema.safeParse(parsedResult);
-      if (!validation.success) {
-        console.error('Zod validation failed:', validation.error.format());
-        throw new Error('AI response did not match expected schema.');
-      }
-
-      blocks = validation.data.blocks;
+      return {
+        layout: prepared.layout,
+        blocks: prepared.layout.blocks,
+        isFallback: false,
+        provider: 'groq',
+      };
 
     } catch (error) {
       if (error.name === 'AbortError') {
@@ -205,19 +327,10 @@ User prompt: "${prompt}"
       }
       console.error('[AI Generation Error]', error.message);
       console.warn('Falling back to rule-based generator due to error.');
-      blocks = generateRuleBasedLayout(prompt);
-      isFallback = true;
+      return makeFallback();
     } finally {
       clearTimeout(timeoutId);
     }
-
-    // Ensure each block has a unique id
-    blocks = blocks.map((block) => ({
-      ...block,
-      id: block.id || randomUUID(),
-    }));
-
-    return { blocks, isFallback };
   },
 
   async generateBlogContent({ topic, tone, keywords, wordCount }) {
@@ -354,44 +467,39 @@ Target Word Count: ${wordCount || '1000 words'}.
     }
   },
 
-  async modifyLayout(currentBlocks, instruction) {
+  async modifyLayout(currentLayout, instruction, options = {}) {
     const GROQ_API_KEY = process.env.GROQ_API_KEY;
     const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.1-8b-instant';
+    const current = normalizeLayoutDocumentV1(currentLayout, {
+      name: options.name || 'AI Modified Layout',
+      kind: options.layoutType || options.kind,
+      origin: 'ai',
+    }).document;
+    const generationOptions = {
+      ...options,
+      kind: current.kind,
+      layoutType: current.kind,
+      designStyle: options.designStyle || current.metadata?.designStyle || 'modern',
+    };
 
-    if (!GROQ_API_KEY) {
+    if (!GROQ_API_KEY && !options.client) {
       console.warn('No GROQ_API_KEY found. Using programmatic fallback for modification.');
-      return { blocks: this.modifyFallback(currentBlocks, instruction) };
+      const layout = this.modifyFallback(current, instruction);
+      return { layout, blocks: layout.blocks, isFallback: true };
     }
 
-    const groq = getGroqClient();
+    const groq = options.client || getGroqClient();
     if (!groq) {
       console.error('Groq client could not be initialized for layout modification.');
-      return { blocks: this.modifyFallback(currentBlocks, instruction) };
+      const layout = this.modifyFallback(current, instruction);
+      return { layout, blocks: layout.blocks, isFallback: true };
     }
 
-    const systemPrompt = `
-You are a CMS layout modification assistant.
-You are given:
-1. The user's current array of layout blocks.
-2. An instruction on what modification to perform (e.g. add a button, change titles, delete blocks, swap order).
-
-You must parse the current array of blocks and generate the MODIFIED array of blocks.
-Each block in the output array MUST follow this exact schema:
-{
-  "id": "<keep the same id if modified/unchanged, or create random UUID if new block>",
-  "type": "<one of: Heading | Paragraph | Image | Quote | Divider | Button | Collection List | hero | card | banner | featured | quote | newsletter>",
-  "content": <content string or object>,
-  "styles": { <optional CSS-in-JS style properties> }
-}
-
-Keep existing block IDs unchanged unless you are deleting them or adding new ones.
-Make sure you strictly apply the user's instructions.
-Return ONLY a valid JSON object with a single root property "blocks" containing the array of modified blocks. Do not return markdown code blocks, do not return explanations.
-`;
+    const systemPrompt = `${buildLayoutSystemPrompt(generationOptions)}\nPreserve existing block IDs for unchanged blocks. Apply only the requested modification.`;
 
     const userPrompt = `
-Current Layout Blocks:
-${JSON.stringify(currentBlocks, null, 2)}
+Current LayoutDocument:
+${JSON.stringify(current, null, 2)}
 
 User Instruction:
 "${instruction}"
@@ -417,87 +525,60 @@ User Instruction:
         throw new Error('Invalid response received from AI provider.');
       }
 
-      const text = chatCompletion.choices[0].message?.content || '{}';
-
-      let parsedResult;
-      try {
-        parsedResult = JSON.parse(text);
-      } catch (parseError) {
-        throw new Error('Failed to parse AI response as JSON.');
+      const prepared = prepareAiLayoutResponse(completionText(chatCompletion), generationOptions);
+      if (!prepared.validation.valid) {
+        console.warn('AI modification failed canonical validation. Using fallback.');
+        const layout = this.modifyFallback(current, instruction);
+        return { layout, blocks: layout.blocks, isFallback: true };
       }
-
-      const layoutSchema = z.object({
-        blocks: z.array(z.object({
-          id: z.string().optional(),
-          type: z.string(),
-          content: z.any().optional(),
-          styles: z.any().optional(),
-          title: z.string().optional(),
-          excerpt: z.string().optional(),
-          author: z.string().optional(),
-          date: z.string().optional(),
-          image: z.string().optional(),
-          category: z.string().optional()
-        }))
-      });
-
-      const validation = layoutSchema.safeParse(parsedResult);
-      if (!validation.success) {
-        console.error('Modify validation failed:', validation.error.format());
-        throw new Error('AI modified response did not match expected schema.');
-      }
-
-      const blocks = validation.data.blocks.map(block => ({
-        ...block,
-        id: block.id || randomUUID()
-      }));
-
-      return { blocks };
+      return { layout: prepared.layout, blocks: prepared.layout.blocks, isFallback: false };
 
     } catch (error) {
       if (error.name === 'AbortError') {
         throw new Error('AI_TIMEOUT');
       }
       console.error('[AI Modify Error]', error.message);
-      return { blocks: this.modifyFallback(currentBlocks, instruction) };
+      const layout = this.modifyFallback(current, instruction);
+      return { layout, blocks: layout.blocks, isFallback: true };
     } finally {
       clearTimeout(timeoutId);
     }
   },
 
-  modifyFallback(currentBlocks, instruction) {
+  modifyFallback(currentLayout, instruction) {
     const lower = instruction.toLowerCase();
     const id = () => randomUUID();
+    const original = normalizeLayoutDocumentV1(currentLayout, {
+      name: currentLayout?.name || 'AI Modified Layout',
+      kind: currentLayout?.kind,
+      origin: 'ai',
+    }).document;
+    let blocks = [...original.blocks];
 
     if (lower.includes('add') || lower.includes('insert') || lower.includes('create') || lower.includes('new')) {
-      return [
-        ...currentBlocks,
-        {
-          id: id(),
-          type: 'banner',
-          title: 'AI Refined Banner',
-          excerpt: `Modified block generated according to: "${instruction}"`,
-          date: new Date().toISOString().split('T')[0],
-          category: 'Refined'
-        }
-      ];
-    }
-
-    if (lower.includes('delete') || lower.includes('remove')) {
-      if (currentBlocks.length > 1) {
-        return currentBlocks.slice(0, -1);
-      }
-    }
-
-    return [
-      ...currentBlocks,
-      {
+      blocks.push({
+        id: id(),
+        type: 'Button',
+        content: { text: 'Learn More', url: '#' },
+        styles: { marginTop: '20px' },
+      });
+    } else if ((lower.includes('delete') || lower.includes('remove')) && blocks.length > 1) {
+      blocks = blocks.slice(0, -1);
+    } else {
+      blocks.push({
         id: id(),
         type: 'Heading',
-        content: `Refined: "${instruction}"`,
-        styles: { textAlign: 'center', color: '#4f46e5', marginTop: '20px' }
-      }
-    ];
+        content: `Refined: ${instruction}`,
+        styles: { textAlign: 'center', color: '#4f46e5', marginTop: '20px' },
+      });
+    }
+
+    const candidate = {
+      ...original,
+      blocks,
+      metadata: { ...original.metadata, origin: 'ai' },
+    };
+    return validateLayoutDocumentV1(candidate).valid ? candidate : original;
   },
 
   async refineContent(content, action) {

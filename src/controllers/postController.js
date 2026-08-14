@@ -1,55 +1,13 @@
 const prisma = require('../models/prismaClient');
 const { assertSameSite } = require('../middlewares/siteMiddleware');
 const { isPlatformAdmin } = require('../utils/siteScope');
-
-/** Canonical post statuses (T11) */
-const POST_STATUS = {
-  PUBLISHED: 'Published',
-  DRAFT: 'Draft',
-  UNPUBLISHED: 'Unpublished',
-};
-
-/**
- * Normalize free-form status strings to Published | Draft | Unpublished.
- */
-const normalizeStatus = (raw, fallback = POST_STATUS.DRAFT) => {
-  const s = String(raw ?? fallback).trim().toLowerCase();
-  if (s === 'published' || s === 'publish' || s === 'live') return POST_STATUS.PUBLISHED;
-  if (s === 'unpublished' || s === 'unpublish' || s === 'private') return POST_STATUS.UNPUBLISHED;
-  if (s === 'draft' || s === 'pending' || s === '') return POST_STATUS.DRAFT;
-  // Accept already-canonical values
-  if (raw === POST_STATUS.PUBLISHED || raw === POST_STATUS.DRAFT || raw === POST_STATUS.UNPUBLISHED) {
-    return raw;
-  }
-  return POST_STATUS.DRAFT;
-};
-
-const isLiveStatus = (status) => normalizeStatus(status) === POST_STATUS.PUBLISHED;
-
-/**
- * Build Prisma fields for a status change (keeps isPublished in sync).
- * @param {string} statusInput
- * @param {{ previousPublishedAt?: Date|null, published_date?: any }} opts
- */
-const buildStatusFields = (statusInput, opts = {}) => {
-  const status = normalizeStatus(statusInput);
-  const published = status === POST_STATUS.PUBLISHED;
-
-  let publishedAt = opts.previousPublishedAt ?? null;
-  if (published) {
-    if (opts.published_date) {
-      publishedAt = new Date(opts.published_date);
-    } else if (!publishedAt) {
-      publishedAt = new Date();
-    }
-  }
-
-  return {
-    status,
-    isPublished: published,
-    publishedAt: published ? publishedAt : publishedAt, // keep historical date when unpublishing
-  };
-};
+const {
+  POST_STATUS,
+  normalizePostStatus,
+  isPublicPost,
+  publicPostWhere,
+  buildPostStatusFields,
+} = require('../contracts/postPublication');
 
 // Helper to format post with author details safely
 const formatPostData = (post) => {
@@ -66,7 +24,7 @@ const formatPostData = (post) => {
   }
 
   const { author: rawAuthor, ...postWithoutAuthor } = post;
-  const status = normalizeStatus(post.status || (post.isPublished ? POST_STATUS.PUBLISHED : POST_STATUS.DRAFT));
+  const status = normalizePostStatus(post.status || (post.isPublished ? POST_STATUS.PUBLISHED : POST_STATUS.DRAFT));
   const cover = post.coverImage || null;
   return {
     ...postWithoutAuthor,
@@ -155,18 +113,20 @@ exports.createPost = async (req, res) => {
     let parsedStructuredData = null;
     if (structuredData) {
       try {
-        parsedStructuredData =
-          typeof structuredData === 'string'
-            ? JSON.parse(structuredData)
-            : JSON.stringify(structuredData);
+        if (typeof structuredData === 'string') {
+          JSON.parse(structuredData);
+          parsedStructuredData = structuredData;
+        } else {
+          parsedStructuredData = JSON.stringify(structuredData);
+        }
       } catch (_) {
         parsedStructuredData = String(structuredData);
       }
     }
 
     // Default new posts to Draft unless explicitly published (T11)
-    const statusFields = buildStatusFields(status ?? POST_STATUS.DRAFT, {
-      published_date,
+    const statusFields = buildPostStatusFields(status ?? POST_STATUS.DRAFT, {
+      publishedDate: published_date,
     });
 
     const post = await prisma.post.create({
@@ -306,7 +266,7 @@ exports.getPostBySlug = async (req, res) => {
       });
     }
 
-    const where = { slug, siteId: req.siteId };
+    const where = publicPostWhere(req.siteId, { slug });
 
     let post = await prisma.post.findFirst({
       where,
@@ -326,10 +286,7 @@ exports.getPostBySlug = async (req, res) => {
 
         if (normalizedSlug && normalizedSlug !== slug) {
           post = await prisma.post.findFirst({
-            where: {
-              slug: normalizedSlug,
-              siteId: req.siteId,
-            },
+            where: publicPostWhere(req.siteId, { slug: normalizedSlug }),
             include: {
               author: { select: { id: true, email: true, name: true, avatar: true } },
             },
@@ -345,7 +302,7 @@ exports.getPostBySlug = async (req, res) => {
     }
 
     // Public slug endpoint: drafts / unpublished must not be readable (T11/T15)
-    if (!isLiveStatus(post.status) && post.isPublished !== true) {
+    if (!isPublicPost(post)) {
       return res.status(404).json({ error: 'Post not found.' });
     }
 
@@ -376,6 +333,11 @@ exports.updatePost = async (req, res) => {
       show_toc,
       allowComments,
       allow_comments,
+      keywords,
+      metaTitle,
+      metaDescription,
+      canonicalUrl,
+      structuredData,
     } = req.body;
     const userId = req.user.id;
     const userRole = req.user.role;
@@ -387,6 +349,20 @@ exports.updatePost = async (req, res) => {
     const finalCategory =
       category ||
       (Array.isArray(categories) && categories.length > 0 ? categories[0] : undefined);
+
+    const keywordsValue = Array.isArray(keywords)
+      ? keywords.join(',')
+      : typeof keywords === 'string'
+        ? keywords
+        : undefined;
+
+    let structuredDataValue;
+    if (structuredData !== undefined) {
+      structuredDataValue =
+        typeof structuredData === 'string'
+          ? structuredData
+          : JSON.stringify(structuredData);
+    }
 
     const existingPost = await prisma.post.findFirst({
       where: {
@@ -442,14 +418,19 @@ exports.updatePost = async (req, res) => {
         allowComments:
           allowCommentsUpdate === true || allowCommentsUpdate === 'true',
       }),
+      ...(keywordsValue !== undefined && { keywords: keywordsValue || null }),
+      ...(metaTitle !== undefined && { metaTitle: metaTitle || null }),
+      ...(metaDescription !== undefined && { metaDescription: metaDescription || null }),
+      ...(canonicalUrl !== undefined && { canonicalUrl: canonicalUrl || null }),
+      ...(structuredDataValue !== undefined && { structuredData: structuredDataValue || null }),
     };
 
     if (status !== undefined) {
       Object.assign(
         data,
-        buildStatusFields(status, {
+        buildPostStatusFields(status, {
           previousPublishedAt: existingPost.publishedAt,
-          published_date,
+          publishedDate: published_date,
         })
       );
     } else if (published_date !== undefined) {
@@ -495,7 +476,7 @@ exports.publishPost = async (req, res) => {
       return res.status(403).json({ error: 'Access denied.' });
     }
 
-    const statusFields = buildStatusFields(POST_STATUS.PUBLISHED, {
+    const statusFields = buildPostStatusFields(POST_STATUS.PUBLISHED, {
       previousPublishedAt: existingPost.publishedAt,
     });
 
@@ -541,7 +522,7 @@ exports.unpublishPost = async (req, res) => {
       return res.status(403).json({ error: 'Access denied.' });
     }
 
-    const statusFields = buildStatusFields(target, {
+    const statusFields = buildPostStatusFields(target, {
       previousPublishedAt: existingPost.publishedAt,
     });
 
