@@ -372,3 +372,17 @@ model DemoRequest {
 
   @@map("demo_requests")
 }
+
+model Payment {
+  id         Int      @id @default(autoincrement())
+  userId     Int      @map("user_id")
+  orderId    String   @unique @map("order_id") @db.VarChar(100)
+  paymentId  String?  @map("payment_id") @db.VarChar(100)
+  amount     Decimal  @db.Decimal(10, 2)
+  currency   String   @default("LKR") @db.VarChar(10)
+  status     String   @default("pending") @db.VarChar(20)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  @@map("payments")
+}
+
