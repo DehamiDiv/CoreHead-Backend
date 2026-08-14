@@ -17,10 +17,17 @@ const creditGuard = async (req, res, next) => {
             return res.status(404).json({ error: 'User not found in system.' });
         }
 
-        // 3. PRO subscription bypass
-        if (user.subscription_status === 'PRO') {
+        const status = user.subscription_status || 'FREE';
+
+        // 3. ENTERPRISE subscription bypass (unlimited)
+        if (status === 'ENTERPRISE') {
             return next();
         }
+
+        // Determine current limit based on subscription status
+        const PRO_DAILY_LIMIT = 100;
+        const FREE_DAILY_LIMIT = 5;
+        const currentLimit = (status === 'PRO') ? PRO_DAILY_LIMIT : FREE_DAILY_LIMIT;
 
         // 4. Cooldown time-based reset check
         const COOLDOWN_MS = process.env.AI_COOLDOWN_MS
@@ -44,18 +51,18 @@ const creditGuard = async (req, res, next) => {
             console.log(`[AI-CREDITS] Cooldown expired. Reset credits used to 0 for user: ${user.email}`);
         }
 
-        // 5. Free user credit limit verification
-        const creditsLeft = user.ai_credits - user.ai_credits_used;
+        // 5. Credit limit verification against current tier limit
+        const creditsLeft = currentLimit - user.ai_credits_used;
         if (creditsLeft <= 0) {
             const msRemaining = COOLDOWN_MS - timeDiff;
             const secondsRemaining = Math.max(0, Math.ceil(msRemaining / 1000));
 
             return res.status(402).json({
                 error: 'LIMIT_EXCEEDED',
-                message: 'You have exceeded your Free tier AI limit (5 generations). Please upgrade to PRO plan for unlimited access.',
+                message: `You have exceeded your ${status} tier AI limit (${currentLimit} generations per day). Please upgrade to unlock more!`,
                 cooldown_remaining: secondsRemaining,
                 credits: {
-                    total: user.ai_credits,
+                    total: currentLimit,
                     used: user.ai_credits_used,
                     remaining: 0
                 }
