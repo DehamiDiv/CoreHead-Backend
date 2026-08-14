@@ -33,3 +33,15 @@ app.use('/api/posts', postRoutes);
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
 });
+
+
+// Register binding-related API routes under the "/api" base path
+const bindingRoutes = require("./routes/bindingRoutes");
+
+app.use("/api", bindingRoutes);
+
+
+// Register blog routes to handle layout and post endpoints under /api/blog
+const blogRoutes = require('./routes/blogRoutes');
+app.use('/api/blog', blogRoutes);
+

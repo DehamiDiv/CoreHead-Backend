@@ -12,7 +12,13 @@ exports.createPost = async (req, res) => {
       status,
       categories,
       featured,
-      authorId
+      authorId,
+      thumbnailUrl, // mapped to coverImage
+      metaTitle,
+      metaDescription,
+      keywords,
+      canonicalUrl,
+      structuredData
     } = req.body;
 
     // Validate required fields
@@ -26,9 +32,15 @@ exports.createPost = async (req, res) => {
         slug,
         excerpt,
         content,
-        status: status || 'published',
+        coverImage: thumbnailUrl,
+        status: status || 'Published',
         categories: categories || [],
         featured: featured || false,
+        metaTitle,
+        metaDescription,
+        keywords: keywords || [],
+        canonicalUrl,
+        structuredData,
         authorId: parseInt(authorId, 10),
       },
     });
@@ -52,7 +64,7 @@ exports.getPosts = async (req, res) => {
           select: {
             id: true,
             email: true,
-            role: true,
+            name: true
           }
         }
       },
@@ -61,12 +73,11 @@ exports.getPosts = async (req, res) => {
       }
     });
 
-    // Format author name (mocking avatar/name based on email if needed, or just sending email)
     const formattedPosts = posts.map(post => ({
       ...post,
       author: {
-        name: post.author.email.split('@')[0], // Simple fallback for name
-        avatar: post.author.email.split('@')[0], // Seed for avatar
+        name: post.author.name || post.author.email.split('@')[0],
+        avatar: post.author.name ? post.author.name.charAt(0) : post.author.email.charAt(0),
       }
     }));
 
@@ -74,5 +85,88 @@ exports.getPosts = async (req, res) => {
   } catch (error) {
     console.error('Error fetching posts:', error);
     res.status(500).json({ error: 'Failed to fetch posts.' });
+  }
+};
+
+// Get single post by ID
+exports.getPostById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const post = await prisma.post.findUnique({
+      where: { id: parseInt(id, 10) }
+    });
+
+    if (!post) {
+      return res.status(404).json({ error: 'Post not found.' });
+    }
+
+    res.status(200).json(post);
+  } catch (error) {
+    console.error('Error fetching post:', error);
+    res.status(500).json({ error: 'Failed to fetch post.' });
+  }
+};
+
+// Update a post
+exports.updatePost = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      title,
+      slug,
+      excerpt,
+      content,
+      status,
+      categories,
+      featured,
+      thumbnailUrl,
+      metaTitle,
+      metaDescription,
+      keywords,
+      canonicalUrl,
+      structuredData
+    } = req.body;
+
+    const post = await prisma.post.update({
+      where: { id: parseInt(id, 10) },
+      data: {
+        title,
+        slug,
+        excerpt,
+        content,
+        coverImage: thumbnailUrl,
+        status,
+        categories,
+        featured,
+        metaTitle,
+        metaDescription,
+        keywords,
+        canonicalUrl,
+        structuredData
+      },
+    });
+
+    res.status(200).json({ message: 'Post updated successfully', post });
+  } catch (error) {
+    console.error('Error updating post:', error);
+    if (error.code === 'P2002') {
+      return res.status(400).json({ error: 'A post with this URL slug already exists.' });
+    }
+    res.status(500).json({ error: 'Failed to update post.' });
+  }
+};
+
+// Delete a post
+exports.deletePost = async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.post.delete({
+      where: { id: parseInt(id, 10) }
+    });
+
+    res.status(200).json({ message: 'Post deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting post:', error);
+    res.status(500).json({ error: 'Failed to delete post.' });
   }
 };
