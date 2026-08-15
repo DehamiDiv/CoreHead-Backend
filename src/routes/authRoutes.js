@@ -34,4 +34,7 @@ router.post('/verify-email', authLimiter, authController.verifyEmail);
 // POST /api/auth/resend-otp
 router.post('/resend-otp', authLimiter, authController.resendOtp);
 
+// POST /api/auth/change-password
+router.post('/change-password', authMiddleware, authController.changePassword);
+
 module.exports = router;
