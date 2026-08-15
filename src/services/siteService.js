@@ -262,30 +262,6 @@ const createSite = async (userId, { name, slug, logo }) => {
   const normalizedName = normalizeName(name);
   const normalizedSlug = normalizeAndValidateSlug(slug);
 
-  // 1. Fetch user's subscription tier
-  const user = await prisma.user.findUnique({
-    where: { id: userId }
-  });
-
-  if (!user) {
-    throw Object.assign(new Error('User account not found'), { statusCode: 404 });
-  }
-
-  // 2. Count active sites currently owned by the user
-  const ownSitesCount = await prisma.site.count({
-    where: { ownerId: userId }
-  });
-
-  const plan = user.subscription_status || 'FREE';
-  const siteLimit = plan === 'ENTERPRISE' ? Infinity : (plan === 'PRO' ? 5 : 1);
-
-  if (ownSitesCount >= siteLimit) {
-    throw Object.assign(
-      new Error(`Site limit reached. Your ${plan} tier only allows up to ${siteLimit} active site(s). Please upgrade to add more sites.`),
-      { statusCode: 403 }
-    );
-  }
-
   const existing = await siteRepository.findSiteBySlug(normalizedSlug);
   if (existing) {
     throw Object.assign(new Error('This site slug is already taken'), { statusCode: 409 });
