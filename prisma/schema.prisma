@@ -386,3 +386,10 @@ model Payment {
   @@map("payments")
 }
 
+model NewsletterSubscription {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+
+  @@map("newsletter_subscriptions")
+}

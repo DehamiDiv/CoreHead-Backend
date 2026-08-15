@@ -23,6 +23,7 @@ const mediaRoutes = require('./routes/mediaRoutes');
 const commentRoutes = require('./routes/commentRoutes');
 const siteRoutes = require('./routes/siteRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
+const newsletterRoutes = require('./routes/newsletterRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -157,6 +158,7 @@ app.use('/api/comments', commentRoutes);
 app.use('/api/reactions', require('./routes/reactionRoutes'));
 app.use('/api/sites', siteRoutes);
 app.use('/api/payment', paymentRoutes);
+app.use('/api/newsletter', newsletterRoutes);
 
 // R1-3: public invite preview + accept (auth on accept)
 const siteController = require('./controllers/siteController');
