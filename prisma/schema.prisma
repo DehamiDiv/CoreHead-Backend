@@ -50,13 +50,16 @@ model builder_layouts {
 }
 
 model categories {
-  id          Int       @id @default(autoincrement())
-  name        String    @db.VarChar(100)
-  slug        String    @db.VarChar(100)
+  id          Int          @id @default(autoincrement())
+  name        String       @db.VarChar(100)
+  slug        String       @db.VarChar(100)
   description String?
+  parentId    Int?
   siteId      Int?
-  created_at  DateTime? @default(now()) @db.Timestamp(6)
-  site        Site?     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  created_at  DateTime?    @default(now()) @db.Timestamp(6)
+  site        Site?        @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  parent      categories?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children    categories[] @relation("CategoryHierarchy")
 
   @@unique([siteId, slug], map: "uq_categories_site_slug")
   @@unique([siteId, name], map: "uq_categories_site_name")
