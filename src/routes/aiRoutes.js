@@ -4,6 +4,7 @@ const { PrismaClient } = require('@prisma/client');
 
 const prisma = new PrismaClient();
 const authMiddleware = require('../middlewares/authMiddleware');
+const creditGuard = require('../middlewares/creditGuard');
 const aiService = require('../services/aiService');
 const { promoteAiLayout } = require('../services/aiLayoutPromotionService');
 const { requireSite } = require('../middlewares/siteMiddleware');
@@ -20,7 +21,7 @@ const aiLimiter = rateLimit({
 
 // ─── POST /api/ai/generate-layout ─────────────────────────────
 // Takes a user prompt and returns an array of BuilderBlocks
-router.post('/generate-layout', authMiddleware, requireSite, aiLimiter, async (req, res) => {
+router.post('/generate-layout', authMiddleware, requireSite, creditGuard, aiLimiter, async (req, res) => {
   try {
     const { prompt, layoutType, designStyle, features } = req.body;
 
@@ -74,6 +75,18 @@ router.post('/generate-layout', authMiddleware, requireSite, aiLimiter, async (r
       });
     } catch (dbErr) {
       console.warn('AI layout DB save failed:', dbErr.message);
+    }
+
+    // Increment credit usage for FREE users
+    if (req.dbUser) {
+      try {
+        await prisma.user.update({
+          where: { id: req.user.id },
+          data: { ai_credits_used: { increment: 1 } }
+        });
+      } catch (incErr) {
+        console.error('Failed to increment user AI credits usage:', incErr.message);
+      }
     }
 
     return res.json({
@@ -196,7 +209,7 @@ router.post('/history/:id/promote', authMiddleware, requireSite, async (req, res
 });
 
 // ─── POST /api/ai/generate-blog ──────────────────────────────
-router.post('/generate-blog', authMiddleware, aiLimiter, async (req, res) => {
+router.post('/generate-blog', authMiddleware, creditGuard, aiLimiter, async (req, res) => {
   try {
     const { topic, tone, keywords, wordCount } = req.body;
 
@@ -209,6 +222,19 @@ router.post('/generate-blog', authMiddleware, aiLimiter, async (req, res) => {
     }
 
     const result = await aiService.generateBlogContent({ topic, tone, keywords, wordCount });
+
+    // Increment credit usage for FREE users
+    if (req.dbUser) {
+      try {
+        await prisma.user.update({
+          where: { id: req.user.id },
+          data: { ai_credits_used: { increment: 1 } }
+        });
+      } catch (incErr) {
+        console.error('Failed to increment user AI credits usage:', incErr.message);
+      }
+    }
+
     return res.json(result);
 
   } catch (error) {
@@ -221,7 +247,7 @@ router.post('/generate-blog', authMiddleware, aiLimiter, async (req, res) => {
 });
 
 // ─── POST /api/ai/modify-layout ──────────────────────────────
-router.post('/modify-layout', authMiddleware, requireSite, aiLimiter, async (req, res) => {
+router.post('/modify-layout', authMiddleware, requireSite, creditGuard, aiLimiter, async (req, res) => {
   try {
     const { currentBlocks, currentLayout, instruction, layoutType, designStyle } = req.body;
     const sourceLayout = currentLayout || currentBlocks;
@@ -238,6 +264,19 @@ router.post('/modify-layout', authMiddleware, requireSite, aiLimiter, async (req
       layoutType,
       designStyle,
     });
+
+    // Increment credit usage for FREE users.
+    if (req.dbUser) {
+      try {
+        await prisma.user.update({
+          where: { id: req.user.id },
+          data: { ai_credits_used: { increment: 1 } },
+        });
+      } catch (incErr) {
+        console.error('Failed to increment user AI credits usage:', incErr.message);
+      }
+    }
+
     return res.json({
       success: true,
       layout: result.layout,
@@ -255,7 +294,7 @@ router.post('/modify-layout', authMiddleware, requireSite, aiLimiter, async (req
 });
 
 // ─── POST /api/ai/refine ──────────────────────────────────────
-router.post('/refine', authMiddleware, aiLimiter, async (req, res) => {
+router.post('/refine', authMiddleware, creditGuard, aiLimiter, async (req, res) => {
   try {
     const { content, action } = req.body;
 
@@ -268,6 +307,19 @@ router.post('/refine', authMiddleware, aiLimiter, async (req, res) => {
     }
 
     const refined = await aiService.refineContent(content, action);
+
+    // Increment credit usage for FREE users
+    if (req.dbUser) {
+      try {
+        await prisma.user.update({
+          where: { id: req.user.id },
+          data: { ai_credits_used: { increment: 1 } }
+        });
+      } catch (incErr) {
+        console.error('Failed to increment user AI credits usage:', incErr.message);
+      }
+    }
+
     return res.json({ success: true, refined });
 
   } catch (error) {

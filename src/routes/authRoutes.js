@@ -13,6 +13,9 @@ router.post('/login', authLimiter, authController.login);
 // POST /api/auth/refresh-token
 router.post('/refresh-token', authLimiter, authController.refreshToken);
 
+// POST /api/auth/google
+router.post('/google', authController.googleLogin);
+
 // GET /api/auth/me - Get currently logged in user
 router.get('/me', authMiddleware, authController.getCurrentUser);
 
@@ -30,5 +33,8 @@ router.post('/verify-email', authLimiter, authController.verifyEmail);
 
 // POST /api/auth/resend-otp
 router.post('/resend-otp', authLimiter, authController.resendOtp);
+
+// POST /api/auth/change-password
+router.post('/change-password', authMiddleware, authController.changePassword);
 
 module.exports = router;

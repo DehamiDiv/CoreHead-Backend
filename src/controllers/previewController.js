@@ -53,6 +53,7 @@ const getPreviewPosts = async (req, res) => {
       published_date: p.createdAt,
       author_name: p.author?.name || p.author?.email || null,
       author_avatar: p.author?.avatar || null,
+      imageUrl: p.coverImage || "https://via.placeholder.com/400x250",
     }));
 
     // No mock posts that could look like real multi-tenant content

@@ -10,6 +10,7 @@ const createTemplate = async (data) => {
       category: data.category || null,
       status: data.status || 'draft',
       siteId: data.siteId,
+      updatedAt: new Date()
     },
   });
 };
@@ -38,6 +39,7 @@ const updateTemplate = async (id, data, newVersion) => {
     data: {
       ...safeData,
       version: newVersion,
+      updatedAt: new Date()
     },
   });
 };

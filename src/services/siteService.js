@@ -501,8 +501,8 @@ const inviteMember = async (siteId, actorId, actorRole, { email, role }) => {
 
     const loginUrl = `${String(
       process.env.FRONTEND_URL ||
-        process.env.NEXT_PUBLIC_APP_URL ||
-        'http://localhost:3000'
+      process.env.NEXT_PUBLIC_APP_URL ||
+      'http://localhost:3000'
     ).replace(/\/$/, '')}/login?callback=${encodeURIComponent(
       `/admin?site=${encodeURIComponent(site.slug)}`
     )}`;
@@ -531,10 +531,9 @@ const inviteMember = async (siteId, actorId, actorRole, { email, role }) => {
       emailError: emailResult.error || null,
       message: emailResult.sent
         ? `${normalizedEmail} was added as ${inviteRole}. Real email sent to their inbox.`
-        : `${normalizedEmail} was added as ${inviteRole}. ${
-            emailResult.error ||
-            'No real email was sent — configure SMTP in backend .env'
-          }`,
+        : `${normalizedEmail} was added as ${inviteRole}. ${emailResult.error ||
+        'No real email was sent — configure SMTP in backend .env'
+        }`,
     };
   }
 
@@ -569,9 +568,8 @@ const inviteMember = async (siteId, actorId, actorRole, { email, role }) => {
       emailError: emailResult.error || null,
       message: emailResult.sent
         ? `Invite email re-sent to ${normalizedEmail} (check their inbox).`
-        : `Invite still pending. ${
-            emailResult.error || 'Email not delivered to real inbox'
-          }. Use the invite link below.`,
+        : `Invite still pending. ${emailResult.error || 'Email not delivered to real inbox'
+        }. Use the invite link below.`,
       resent: true,
     };
   }
@@ -620,9 +618,8 @@ const inviteMember = async (siteId, actorId, actorRole, { email, role }) => {
     emailError: emailResult.error || null,
     message: emailResult.sent
       ? `Invite email sent to ${normalizedEmail} (check their inbox / spam).`
-      : `Invite created. ${
-          emailResult.error || 'Email was NOT sent to a real inbox'
-        }. Copy the invite link below.`,
+      : `Invite created. ${emailResult.error || 'Email was NOT sent to a real inbox'
+      }. Copy the invite link below.`,
     resent: false,
   };
 };

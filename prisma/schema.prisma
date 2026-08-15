@@ -69,10 +69,12 @@ model categories {
 model User {
   id                   Int               @id @default(autoincrement())
   email                String            @unique
-  password             String
+  password             String?
   name                 String?
   role                 String            @default("user")
   status               String            @default("active")
+  provider             String            @default("local")
+  providerId           String?
   resetPasswordToken   String?
   resetPasswordExpires DateTime?
   isEmailVerified      Boolean           @default(false)
@@ -82,6 +84,11 @@ model User {
   bio                  String?
   designation          String?
   nicename             String?
+  subscription_status  String            @default("FREE")
+  stripe_customer_id   String?
+  ai_credits           Int               @default(5)
+  ai_credits_used      Int               @default(0)
+  last_credits_reset   DateTime          @default(now())
   createdAt            DateTime          @default(now())
   updatedAt            DateTime          @updatedAt
   binding              Binding[]
@@ -357,4 +364,36 @@ model Setting {
   @@unique([siteId, key], map: "uq_settings_site_key")
   @@index([siteId], map: "idx_settings_site")
   @@map("settings")
+}
+
+model DemoRequest {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String
+  company   String?
+  message   String?
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+
+  @@map("demo_requests")
+}
+
+model Payment {
+  id         Int      @id @default(autoincrement())
+  userId     Int      @map("user_id")
+  orderId    String   @unique @map("order_id") @db.VarChar(100)
+  paymentId  String?  @map("payment_id") @db.VarChar(100)
+  amount     Decimal  @db.Decimal(10, 2)
+  currency   String   @default("LKR") @db.VarChar(10)
+  status     String   @default("pending") @db.VarChar(20)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  @@map("payments")
+}
+
+model NewsletterSubscription {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+
+  @@map("newsletter_subscriptions")
 }

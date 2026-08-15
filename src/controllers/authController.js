@@ -1,13 +1,51 @@
 const authService = require('../services/authService');
 const validate = require('deep-email-validator');
+const prisma = require('../models/prismaClient');
+
+// Password validation regex: at least 8 chars, 1 uppercase, 1 lowercase, 1 digit, 1 special character
+const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9\s]).{8,}$/;
+
+function validatePassword(password) {
+    if (!password || typeof password !== 'string') {
+        return 'Password is required.';
+    }
+    if (password.length < 8) {
+        return 'Password must be at least 8 characters long.';
+    }
+    if (password.length > 128) {
+        return 'Password cannot exceed 128 characters.';
+    }
+    if (!PASSWORD_REGEX.test(password)) {
+        return 'Password must include at least one uppercase letter, one lowercase letter, one number, and one special character (e.g. !@#$%^&*).';
+    }
+    return null;
+}
 
 const register = async (req, res) => {
     try {
-        const { email, password, name } = req.body;
+        let { email, password, name } = req.body;
 
         // Basic presence validation
         if (!email || !password) {
-            return res.status(400).json({ error: 'Email and password are required' });
+            return res.status(400).json({ error: 'Email and password are required.' });
+        }
+
+        email = String(email).trim().toLowerCase();
+
+        // Name Validation (if provided)
+        if (name && typeof name === 'string') {
+            const trimmedName = name.trim();
+            if (trimmedName.length < 2) {
+                return res.status(400).json({ error: 'Name must be at least 2 characters long.' });
+            }
+            if (trimmedName.length > 100) {
+                return res.status(400).json({ error: 'Name cannot exceed 100 characters.' });
+            }
+            // Allow letters from any language, spaces, hyphens, periods, or apostrophes
+            const nameRegex = /^[\p{L}\s'\-\.]+$/u;
+            if (!nameRegex.test(trimmedName)) {
+                return res.status(400).json({ error: 'Name can only contain letters, spaces, hyphens, periods, or apostrophes.' });
+            }
         }
 
         // Email Format Validation (Regex)
@@ -17,25 +55,22 @@ const register = async (req, res) => {
         }
 
         // Deep Email Validation (Check for typos, disposable emails, and MX records)
-        // In local development, we don't want to block users due to offline/DNS/test domain issues,
-        // so we skip blocking on MX and SMTP validations unless running in production.
-        try {
-            const validationResult = await validate.validate(email);
-            if (!validationResult.valid) {
-                const { validators } = validationResult;
-                
-                if (validators.regex && !validators.regex.valid) {
-                    return res.status(400).json({ error: 'Please enter a valid email address format.' });
-                }
-                if (validators.disposable && !validators.disposable.valid) {
-                    return res.status(400).json({ error: 'Disposable email addresses are not allowed.' });
-                }
-                if (validators.typo && !validators.typo.valid && validators.typo.bestSuggestion) {
-                    return res.status(400).json({ error: `Did you mean ${validators.typo.bestSuggestion}?` });
-                }
-                
-                // For MX/SMTP, we only reject if NODE_ENV is 'production'
-                if (process.env.NODE_ENV === 'production') {
+        // ONLY run in production to prevent blocking local development/test emails
+        if (process.env.NODE_ENV === 'production') {
+            try {
+                const validationResult = await validate.validate(email);
+                if (!validationResult.valid) {
+                    const { validators } = validationResult;
+
+                    if (validators.regex && !validators.regex.valid) {
+                        return res.status(400).json({ error: 'Please enter a valid email address format.' });
+                    }
+                    if (validators.disposable && !validators.disposable.valid) {
+                        return res.status(400).json({ error: 'Disposable email addresses are not allowed.' });
+                    }
+                    if (validators.typo && !validators.typo.valid && validators.typo.bestSuggestion) {
+                        return res.status(400).json({ error: `Did you mean ${validators.typo.bestSuggestion}?` });
+                    }
                     if (validators.mx && !validators.mx.valid) {
                         return res.status(400).json({ error: 'The email domain does not exist or cannot receive emails.' });
                     }
@@ -43,17 +78,15 @@ const register = async (req, res) => {
                         return res.status(400).json({ error: 'This email account does not appear to exist.' });
                     }
                 }
+            } catch (validationError) {
+                console.warn('Deep email validation failed to execute:', validationError.message);
             }
-        } catch (validationError) {
-            console.warn('Deep email validation failed to execute:', validationError.message);
         }
 
         // Strong Password Validation
-        const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
-        if (!passwordRegex.test(password)) {
-            return res.status(400).json({ 
-                error: 'Password is too weak. It must be at least 8 characters long and include at least one uppercase letter, one lowercase letter, one number, and one special character (@$!%*?&).' 
-            });
+        const passwordError = validatePassword(password);
+        if (passwordError) {
+            return res.status(400).json({ error: passwordError });
         }
 
         const { user: newUser, emailResult, otp } = await authService.registerUser(
@@ -67,7 +100,7 @@ const register = async (req, res) => {
             message: realDelivery
                 ? 'User registered successfully. Verification code sent to your email.'
                 : 'User registered successfully. Email was NOT delivered to a real inbox — use the code shown below or check the backend console.',
-            user: { id: newUser.id, email: newUser.email, name: newUser.name },
+            user: newUser,
             emailSent: !!emailResult?.sent,
             emailRealDelivery: realDelivery,
             emailProvider: emailResult?.provider || null,
@@ -94,11 +127,13 @@ const register = async (req, res) => {
 
 const login = async (req, res) => {
     try {
-        const { email, password } = req.body;
+        let { email, password } = req.body;
 
         if (!email || !password) {
-            return res.status(400).json({ error: 'Email and password are required' });
+            return res.status(400).json({ error: 'Email and password are required.' });
         }
+
+        email = String(email).trim().toLowerCase();
 
         const { user, accessToken, refreshToken } = await authService.loginUser(email, password);
 
@@ -106,16 +141,38 @@ const login = async (req, res) => {
             message: 'Login successful',
             accessToken,
             refreshToken,
-            user: { 
-                id: user.id, 
-                email: user.email, 
-                role: user.role, 
-                name: user.name, 
-                avatar: user.avatar 
-            }
+            user
         });
     } catch (error) {
+        if (error.code === 'EMAIL_NOT_VERIFIED') {
+            return res.status(403).json({
+                error: error.message,
+                code: 'EMAIL_NOT_VERIFIED',
+                email: error.email
+            });
+        }
         res.status(401).json({ error: error.message });
+    }
+};
+
+const googleLogin = async (req, res) => {
+    try {
+        const { credential } = req.body;
+
+        if (!credential) {
+            return res.status(400).json({ error: 'Credential ID token is required.' });
+        }
+
+        const { user, accessToken, refreshToken } = await authService.googleLogin(credential);
+
+        res.status(200).json({
+            message: 'Google login successful',
+            accessToken,
+            refreshToken,
+            user
+        });
+    } catch (error) {
+        res.status(400).json({ error: error.message });
     }
 };
 
@@ -123,12 +180,16 @@ const refreshToken = async (req, res) => {
     try {
         const { refreshToken } = req.body;
         if (!refreshToken) {
-            return res.status(400).json({ error: 'Refresh token is required' });
+            return res.status(400).json({ error: 'Refresh token is required.' });
         }
 
-        const { accessToken } = await authService.refreshAccessToken(refreshToken);
+        const result = await authService.refreshAccessToken(refreshToken);
 
-        res.status(200).json({ accessToken });
+        res.status(200).json({
+            accessToken: result.accessToken,
+            refreshToken: result.refreshToken,
+            user: result.user
+        });
     } catch (error) {
         res.status(401).json({ error: error.message });
     }
@@ -136,21 +197,43 @@ const refreshToken = async (req, res) => {
 
 const getCurrentUser = async (req, res) => {
     try {
-        const user = await authService.getUserById(req.user.id);
+        let user = await authService.getUserById(req.user.id);
         if (!user) {
-            return res.status(404).json({ error: 'User not found' });
+            return res.status(404).json({ error: 'User not found.' });
         }
-        res.status(200).json({ 
-            user: { 
-                id: user.id, 
-                email: user.email, 
-                role: user.role, 
-                name: user.name, 
-                avatar: user.avatar 
-            } 
+
+        // Apply time-based reset if cooldown period has expired
+        const COOLDOWN_MS = process.env.AI_COOLDOWN_MS
+            ? parseInt(process.env.AI_COOLDOWN_MS, 10)
+            : 24 * 60 * 60 * 1000;
+
+        const now = new Date();
+        const lastReset = user.last_credits_reset ? new Date(user.last_credits_reset) : new Date(user.createdAt);
+        const timeDiff = Math.max(0, now.getTime() - lastReset.getTime());
+
+        let cooldownRemaining = 0;
+        if (timeDiff >= COOLDOWN_MS) {
+            user = await prisma.user.update({
+                where: { id: user.id },
+                data: {
+                    ai_credits_used: 0,
+                    last_credits_reset: now
+                }
+            });
+            console.log(`[AI-CREDITS] Cooldown reset on fetch(/me) for user: ${user.email}`);
+        } else {
+            cooldownRemaining = Math.max(0, Math.ceil((COOLDOWN_MS - timeDiff) / 1000));
+        }
+
+        const sanitized = authService.sanitizeUser(user);
+        sanitized.cooldown_remaining = cooldownRemaining;
+
+        res.status(200).json({
+            user: sanitized
         });
     } catch (error) {
-        res.status(500).json({ error: 'Failed to fetch user details' });
+        console.error('GetCurrentUser auth check error:', error);
+        res.status(500).json({ error: 'Failed to fetch user details.' });
     }
 };
 
@@ -160,21 +243,22 @@ const getAllUsers = async (req, res) => {
         const users = await userRepository.findAllUsers();
         res.status(200).json(users);
     } catch (error) {
-        res.status(500).json({ error: 'Failed to fetch users' });
+        res.status(500).json({ error: 'Failed to fetch users.' });
     }
 };
 
 const forgotPassword = async (req, res) => {
     try {
-        const { email } = req.body;
+        let { email } = req.body;
         if (!email) {
-            return res.status(400).json({ error: 'Please provide an email address' });
+            return res.status(400).json({ error: 'Please provide an email address.' });
         }
 
+        email = String(email).trim().toLowerCase();
         await authService.requestPasswordReset(email);
 
         res.status(200).json({
-            message: 'Token sent to email!'
+            message: 'If an account with that email exists, a password reset link has been sent.'
         });
     } catch (error) {
         res.status(400).json({ error: error.message });
@@ -185,13 +269,19 @@ const resetPassword = async (req, res) => {
     try {
         const { token, password } = req.body;
         if (!token || !password) {
-            return res.status(400).json({ error: 'Token and password are required' });
+            return res.status(400).json({ error: 'Token and new password are required.' });
         }
 
-        await authService.resetPassword(token, password);
+        const passwordError = validatePassword(password);
+        if (passwordError) {
+            return res.status(400).json({ error: passwordError });
+        }
+
+        const user = await authService.resetPassword(token.trim(), password);
 
         res.status(200).json({
-            message: 'Password reset successful!'
+            message: 'Password reset successful! You can now log in with your new password.',
+            user
         });
     } catch (error) {
         res.status(400).json({ error: error.message });
@@ -200,15 +290,21 @@ const resetPassword = async (req, res) => {
 
 const verifyEmail = async (req, res) => {
     try {
-        const { email, otp } = req.body;
+        let { email, otp } = req.body;
         if (!email || !otp) {
-            return res.status(400).json({ error: 'Email and OTP are required' });
+            return res.status(400).json({ error: 'Email and verification code (OTP) are required.' });
         }
 
-        await authService.verifyEmail(email, otp);
+        email = String(email).trim().toLowerCase();
+        otp = String(otp).trim();
+
+        const result = await authService.verifyEmail(email, otp);
 
         res.status(200).json({
-            message: 'Email verified successfully! You can now log in.'
+            message: 'Email verified successfully! You are now logged in.',
+            accessToken: result.accessToken,
+            refreshToken: result.refreshToken,
+            user: result.user
         });
     } catch (error) {
         res.status(400).json({ error: error.message });
@@ -217,19 +313,18 @@ const verifyEmail = async (req, res) => {
 
 const resendOtp = async (req, res) => {
     try {
-        const { email } = req.body;
+        let { email } = req.body;
         if (!email) {
-            return res.status(400).json({ error: 'Email is required' });
+            return res.status(400).json({ error: 'Email is required.' });
         }
 
-        const { emailResult, otp } = await authService.resendVerificationOtp(
-            String(email).trim().toLowerCase()
-        );
+        email = String(email).trim().toLowerCase();
+        const { emailResult, otp } = await authService.resendVerificationOtp(email);
 
         const realDelivery = !!emailResult?.realDelivery || !!emailResult?.sent;
         const payload = {
             message: realDelivery
-                ? 'A new verification code was sent to your email.'
+                ? 'A new verification code has been sent to your email.'
                 : emailResult?.error ||
                   'OTP generated but email was NOT delivered. Configure SMTP or use the code below.',
             emailSent: !!emailResult?.sent,
@@ -249,14 +344,58 @@ const resendOtp = async (req, res) => {
     }
 };
 
+const changePassword = async (req, res) => {
+    try {
+        const { currentPassword, newPassword } = req.body;
+        if (!currentPassword || !newPassword) {
+            return res.status(400).json({ error: 'Current password and new password are required.' });
+        }
+
+        const passwordError = validatePassword(newPassword);
+        if (passwordError) {
+            return res.status(400).json({ error: passwordError });
+        }
+
+        const user = await prisma.user.findUnique({
+            where: { id: req.user.id }
+        });
+
+        if (!user) {
+            return res.status(404).json({ error: 'User not found.' });
+        }
+
+        if (!user.password) {
+            return res.status(400).json({ error: 'This account uses Google OAuth. Please use password reset to set a password.' });
+        }
+
+        const bcrypt = require('bcryptjs');
+        const isMatch = await bcrypt.compare(currentPassword, user.password);
+        if (!isMatch) {
+            return res.status(400).json({ error: 'Incorrect current password.' });
+        }
+
+        const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+        await prisma.user.update({
+            where: { id: user.id },
+            data: { password: hashedNewPassword }
+        });
+
+        res.status(200).json({ message: 'Password changed successfully.' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
 module.exports = {
     register,
     login,
+    googleLogin,
     refreshToken,
     verifyEmail,
     resendOtp,
     getCurrentUser,
     getAllUsers,
     forgotPassword,
-    resetPassword
+    resetPassword,
+    changePassword
 };
