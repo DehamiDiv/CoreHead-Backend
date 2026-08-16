@@ -1,50 +1,91 @@
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
 
-const prisma = new PrismaClient();
+const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9\s]).{8,}$/;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-async function seedAdminUser(email, password) {
-  // Check if user already exists
-  const existing = await prisma.user.findUnique({ where: { email } });
+function readAdminConfig(env = process.env) {
+  const email = String(env.ADMIN_EMAIL || '').trim().toLowerCase();
+  const password = String(env.ADMIN_PASSWORD || '');
+  const name = String(env.ADMIN_NAME || 'CoreHead Administrator').trim();
 
-  const salt = await bcrypt.genSalt(10);
-  const hashedPassword = await bcrypt.hash(password, salt);
+  if (!email || !password) {
+    throw new Error('ADMIN_EMAIL and ADMIN_PASSWORD are required.');
+  }
+  if (!EMAIL_REGEX.test(email)) {
+    throw new Error('ADMIN_EMAIL must be a valid email address.');
+  }
+  if (password.length > 128 || !PASSWORD_REGEX.test(password)) {
+    throw new Error(
+      'ADMIN_PASSWORD must be 8-128 characters and include uppercase, lowercase, number, and special characters.',
+    );
+  }
 
-  if (existing) {
-    console.log(`User already exists: ${existing.email} | Role: ${existing.role}`);
-    const updated = await prisma.user.update({
-      where: { email },
-      data: {
-        password: hashedPassword,
-        role: 'admin',
-        isEmailVerified: true
-      },
-    });
-    console.log(`Updated admin details for: ${updated.email}`);
-  } else {
-    console.log(`Creating new Admin user: ${email}...`);
+  return { email, password, name: name || 'CoreHead Administrator' };
+}
+
+async function seedAdminUser({ prisma, config, bcryptLib = bcrypt }) {
+  const existing = await prisma.user.findUnique({
+    where: { email: config.email },
+  });
+
+  if (!existing) {
+    const password = await bcryptLib.hash(config.password, 10);
     const user = await prisma.user.create({
       data: {
-        email,
-        password: hashedPassword,
+        email: config.email,
+        password,
+        name: config.name,
         role: 'admin',
-        isEmailVerified: true
+        status: 'active',
+        provider: 'local',
+        isEmailVerified: true,
       },
     });
-    console.log(`✅ Admin user created successfully: ${user.email}`);
+    return { action: 'created', user };
   }
+
+  const passwordMatches = existing.password
+    ? await bcryptLib.compare(config.password, existing.password)
+    : false;
+  const data = {
+    name: config.name || existing.name,
+    role: 'admin',
+    status: 'active',
+    isEmailVerified: true,
+  };
+
+  if (!passwordMatches) {
+    data.password = await bcryptLib.hash(config.password, 10);
+  }
+
+  const user = await prisma.user.update({
+    where: { email: config.email },
+    data,
+  });
+  return { action: 'updated', user };
 }
 
 async function main() {
-  await seedAdminUser('dehamidivyanjali166@gmail.com', 'Admin@1234');
-  await seedAdminUser('admin@corehead.com', 'Admin@CoreHead2026');
+  require('dotenv').config();
+  const prisma = new PrismaClient();
+  try {
+    const config = readAdminConfig();
+    const result = await seedAdminUser({ prisma, config });
+    console.log(`Admin ${result.action}: ${result.user.email}`);
+  } finally {
+    await prisma.$disconnect();
+  }
 }
 
-main()
-  .catch((e) => {
-    console.error('❌ Error seeding admin:', e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(`Admin seed failed: ${error.message}`);
+    process.exitCode = 1;
   });
+}
+
+module.exports = {
+  readAdminConfig,
+  seedAdminUser,
+};

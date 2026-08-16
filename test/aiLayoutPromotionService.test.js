@@ -2,8 +2,8 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 
 const { promoteAiLayout } = require('../src/services/aiLayoutPromotionService');
-const validSingle = require('../../contracts/fixtures/valid-single-post.json');
-const validHome = require('../../contracts/fixtures/valid-home-page.json');
+const validSingle = require('../src/contracts/fixtures/valid-single-post.json');
+const validHome = require('../src/contracts/fixtures/valid-home-page.json');
 
 function createPromotionPrisma(history) {
   const calls = [];

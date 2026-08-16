@@ -3,9 +3,9 @@ const test = require('node:test');
 
 const aiService = require('../src/services/aiService');
 const { validateLayoutDocumentV1 } = require('../src/contracts/layoutContract');
-const validSingle = require('../../contracts/fixtures/valid-single-post.json');
-const validArchive = require('../../contracts/fixtures/valid-blog-archive.json');
-const validHome = require('../../contracts/fixtures/valid-home-page.json');
+const validSingle = require('../src/contracts/fixtures/valid-single-post.json');
+const validArchive = require('../src/contracts/fixtures/valid-blog-archive.json');
+const validHome = require('../src/contracts/fixtures/valid-home-page.json');
 
 function providerWithResponses(responses) {
   const calls = [];

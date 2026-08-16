@@ -5,7 +5,7 @@ const {
   normalizeLayoutDocumentV1,
   validateLayoutDocumentV1,
 } = require('../src/contracts/layoutContract');
-const validSingle = require('../../contracts/fixtures/valid-single-post.json');
+const validSingle = require('../src/contracts/fixtures/valid-single-post.json');
 
 test('returns an isolated clone for an existing LayoutDocument v1', () => {
   const result = normalizeLayoutDocumentV1(validSingle);

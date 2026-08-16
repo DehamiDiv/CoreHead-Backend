@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 
 const { auditAndMigrateTemplates } = require('../src/services/layoutMigrationService');
-const validArchive = require('../../contracts/fixtures/valid-blog-archive.json');
+const validArchive = require('../src/contracts/fixtures/valid-blog-archive.json');
 
 function migrationPrisma(templates) {
   const writes = [];

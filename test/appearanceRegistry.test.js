@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 
-const shared = require('../../contracts/appearance-registry-v1');
+const shared = require('../src/contracts/appearance-registry-v1');
 const backend = require('../src/utils/themePresets');
 
 test('backend consumes the shared theme registry without a duplicate preset table', () => {

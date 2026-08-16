@@ -4,10 +4,10 @@ const test = require('node:test');
 const aiService = require('../src/services/aiService');
 const { promoteAiLayout } = require('../src/services/aiLayoutPromotionService');
 const { assertAssignableTemplate } = require('../src/contracts/templateLayout');
-const { prepareRenderableLayout } = require('../../contracts/renderable-layout-v1');
-const validSingle = require('../../contracts/fixtures/valid-single-post.json');
-const validArchive = require('../../contracts/fixtures/valid-blog-archive.json');
-const validHome = require('../../contracts/fixtures/valid-home-page.json');
+const { prepareRenderableLayout } = require('../src/contracts/renderable-layout-v1');
+const validSingle = require('../src/contracts/fixtures/valid-single-post.json');
+const validArchive = require('../src/contracts/fixtures/valid-blog-archive.json');
+const validHome = require('../src/contracts/fixtures/valid-home-page.json');
 
 function provider(document) {
   return {

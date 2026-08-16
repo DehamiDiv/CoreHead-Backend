@@ -4,7 +4,7 @@ const test = require('node:test');
 const {
   extractHomeStyle,
   normalizeHomeStyle,
-} = require('../../contracts/appearance-model-v1');
+} = require('../src/contracts/appearance-model-v1');
 const { mergeBranding } = require('../src/utils/themePresets');
 
 test('backend normalizes canonical and legacy homepage layout IDs', () => {

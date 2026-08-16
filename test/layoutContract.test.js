@@ -8,10 +8,10 @@ const {
   LAYOUT_BINDING_PATHS,
   layoutDocumentV1Schema,
 } = require('../src/contracts/layoutContract');
-const validSingle = require('../../contracts/fixtures/valid-single-post.json');
-const validArchive = require('../../contracts/fixtures/valid-blog-archive.json');
-const validHome = require('../../contracts/fixtures/valid-home-page.json');
-const invalidSingle = require('../../contracts/fixtures/invalid-single-post.json');
+const validSingle = require('../src/contracts/fixtures/valid-single-post.json');
+const validArchive = require('../src/contracts/fixtures/valid-blog-archive.json');
+const validHome = require('../src/contracts/fixtures/valid-home-page.json');
+const invalidSingle = require('../src/contracts/fixtures/invalid-single-post.json');
 
 test('backend consumes the canonical LayoutDocument v1 contract', () => {
   assert.equal(LAYOUT_SCHEMA_VERSION, '1.0');
