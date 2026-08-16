@@ -109,7 +109,7 @@ const register = async (req, res) => {
             emailError: emailResult?.error || null,
         };
 
-        // Dev convenience: when SMTP is missing, return OTP so verify can proceed
+        // Dev convenience: when the email provider is missing, return OTP so verify can proceed
         if (
             !realDelivery &&
             authService.allowDevOtpInResponse() &&
@@ -117,7 +117,7 @@ const register = async (req, res) => {
         ) {
             payload.devOtp = otp;
             payload.message =
-                'Account created. SMTP is not configured — OTP is shown below (and in the backend console). Configure EMAIL_HOST/EMAIL_USER/EMAIL_PASS for real Gmail delivery.';
+                'Account created. Resend is not configured — OTP is shown below (and in the backend console). Configure RESEND_API_KEY and EMAIL_FROM for email delivery.';
         }
 
         res.status(201).json(payload);
@@ -327,7 +327,7 @@ const resendOtp = async (req, res) => {
             message: realDelivery
                 ? 'A new verification code has been sent to your email.'
                 : emailResult?.error ||
-                  'OTP generated but email was NOT delivered. Configure SMTP or use the code below.',
+                  'OTP generated but email was NOT delivered. Configure Resend or use the code below.',
             emailSent: !!emailResult?.sent,
             emailRealDelivery: realDelivery,
             emailProvider: emailResult?.provider || null,
