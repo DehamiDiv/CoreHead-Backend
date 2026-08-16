@@ -27,7 +27,14 @@ const PORT = process.env.PORT || 5000;
 
 // ── Middleware ──
 app.use(cors());
-app.use(express.json({ limit: '50mb' }));
+// Bypass express.json() for Stripe webhook so it can parse raw body
+app.use((req, res, next) => {
+  if (req.originalUrl === '/api/payment/webhook') {
+    next();
+  } else {
+    express.json({ limit: '50mb' })(req, res, next);
+  }
+});
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Serve static uploads
