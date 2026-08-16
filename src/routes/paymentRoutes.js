@@ -35,7 +35,7 @@ router.post('/checkout-session', authMiddleware, async (req, res) => {
             await prisma.user.update({
                 where: { id: userId },
                 data: {
-                    subscription_status: 'PRO',
+                    subscription_status: planType,
                     ai_credits_used: 0
                 }
             });
@@ -111,13 +111,14 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
 
         if (userIdStr) {
             const userId = parseInt(userIdStr);
-            console.log(`[Billing Upgrade] Stripe payment success detected. Upgrading User ID: ${userId} to PRO.`);
+            const planType = session.metadata?.planType || 'PRO';
+            console.log(`[Billing Upgrade] Stripe payment success detected. Upgrading User ID: ${userId} to ${planType}.`);
 
             try {
                 await prisma.user.update({
                     where: { id: userId },
                     data: {
-                        subscription_status: 'PRO',
+                        subscription_status: planType,
                         ai_credits_used: 0 // Reset credits count
                     }
                 });
@@ -300,14 +301,15 @@ router.post('/payhere/notify', async (req, res) => {
 
         // Upgrade user status if payload represents successful purchase check
         if (finalStatus === 'paid') {
+            const upgradedPlan = parseFloat(payhere_amount) > 10000 ? 'ENTERPRISE' : 'PRO';
             await prisma.user.update({
                 where: { id: updatedPayment.userId },
                 data: {
-                    subscription_status: 'PRO',
+                    subscription_status: upgradedPlan,
                     ai_credits_used: 0
                 }
             });
-            console.log(`[PayHere Upgrade] User ID ${updatedPayment.userId} upgraded to PRO. order_id: ${order_id}`);
+            console.log(`[PayHere Upgrade] User ID ${updatedPayment.userId} upgraded to ${upgradedPlan}. order_id: ${order_id}`);
         }
 
         return res.status(200).send('OK');
