@@ -21,6 +21,48 @@ function validatePassword(password) {
     return null;
 }
 
+async function validateRegistrationEmail(
+    email,
+    { validator = validate.validate, logger = console } = {}
+) {
+    const isDevDomain = email.endsWith('@example.com') || email.endsWith('@test.com') || email.endsWith('@localhost');
+    if (isDevDomain) return null;
+
+    try {
+        const validationResult = await validator({
+            email,
+            validateRegex: true,
+            validateMx: true,
+            validateTypo: true,
+            validateDisposable: true,
+            validateSMTP: false,
+        });
+
+        if (validationResult.valid) return null;
+
+        const validators = validationResult.validators || {};
+        if (validators.regex && !validators.regex.valid) {
+            return 'Please enter a valid email address format.';
+        }
+        if (validators.disposable && !validators.disposable.valid) {
+            return 'Disposable email addresses are not allowed.';
+        }
+        if (validators.typo && !validators.typo.valid && validators.typo.bestSuggestion) {
+            return `Did you mean ${validators.typo.bestSuggestion}?`;
+        }
+        if (validators.mx && !validators.mx.valid) {
+            return 'The email domain does not exist or cannot receive emails.';
+        }
+
+        // SMTP results are intentionally ignored. The verification OTP proves
+        // that the user controls the mailbox without rejecting valid providers.
+        return null;
+    } catch (validationError) {
+        logger.warn('Deep email validation failed to execute:', validationError.message);
+        return null;
+    }
+}
+
 const register = async (req, res) => {
     try {
         let { email, password, name } = req.body;
@@ -54,34 +96,10 @@ const register = async (req, res) => {
             return res.status(400).json({ error: 'Please enter a valid email address format.' });
         }
 
-        // Deep Email Validation (Check for typos, disposable emails, and MX records)
-        // Always run, but allow developer test domains (like test.com, example.com, localhost)
-        const isDevDomain = email.endsWith('@example.com') || email.endsWith('@test.com') || email.endsWith('@localhost');
-        if (!isDevDomain) {
-            try {
-                const validationResult = await validate.validate(email);
-                if (!validationResult.valid) {
-                    const { validators } = validationResult;
-
-                    if (validators.regex && !validators.regex.valid) {
-                        return res.status(400).json({ error: 'Please enter a valid email address format.' });
-                    }
-                    if (validators.disposable && !validators.disposable.valid) {
-                        return res.status(400).json({ error: 'Disposable email addresses are not allowed.' });
-                    }
-                    if (validators.typo && !validators.typo.valid && validators.typo.bestSuggestion) {
-                        return res.status(400).json({ error: `Did you mean ${validators.typo.bestSuggestion}?` });
-                    }
-                    if (validators.mx && !validators.mx.valid) {
-                        return res.status(400).json({ error: 'The email domain does not exist or cannot receive emails.' });
-                    }
-                    if (validators.smtp && !validators.smtp.valid) {
-                        return res.status(400).json({ error: 'This email account does not appear to exist.' });
-                    }
-                }
-            } catch (validationError) {
-                console.warn('Deep email validation failed to execute:', validationError.message);
-            }
+        // Keep deterministic checks, but let the verification OTP prove mailbox ownership.
+        const emailValidationError = await validateRegistrationEmail(email);
+        if (emailValidationError) {
+            return res.status(400).json({ error: emailValidationError });
         }
 
         // Strong Password Validation
@@ -388,6 +406,7 @@ const changePassword = async (req, res) => {
 };
 
 module.exports = {
+    validateRegistrationEmail,
     register,
     login,
     googleLogin,
