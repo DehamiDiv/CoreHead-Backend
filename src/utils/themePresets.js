@@ -3,8 +3,8 @@
 const {
   THEME_REGISTRY,
   getThemeRegistration,
-} = require('../../../contracts/appearance-registry-v1');
-const { normalizeHomeStyle } = require('../../../contracts/appearance-model-v1');
+} = require('../contracts/appearance-registry-v1');
+const { normalizeHomeStyle } = require('../contracts/appearance-model-v1');
 
 const PRESETS = THEME_REGISTRY;
 
