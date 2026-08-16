@@ -1,9 +1,9 @@
-const layoutDocumentV1Schema = require('../../../contracts/layout-document-v1.schema.json');
+const layoutDocumentV1Schema = require('./layout-document-v1.schema.json');
 const {
   assertValidLayoutDocumentV1,
   validateLayoutDocumentV1,
-} = require('../../../contracts/layout-validator-v1');
-const { normalizeLayoutDocumentV1 } = require('../../../contracts/layout-normalizer-v1');
+} = require('./layout-validator-v1');
+const { normalizeLayoutDocumentV1 } = require('./layout-normalizer-v1');
 
 const LAYOUT_SCHEMA_VERSION = '1.0';
 const LAYOUT_KINDS = Object.freeze(['single-post', 'blog-archive', 'home-page']);

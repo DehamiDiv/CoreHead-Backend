@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "1.0",
+  "kind": "home-page",
+  "name": "Editorial Home Page",
+  "metadata": {
+    "description": "A branded hero followed by the site's latest published posts.",
+    "designStyle": "editorial",
+    "origin": "manual"
+  },
+  "blocks": [
+    {
+      "id": "home-hero",
+      "type": "Container",
+      "content": "",
+      "styles": {
+        "paddingTop": "72px",
+        "paddingBottom": "56px",
+        "maxWidth": "1120px"
+      }
+    },
+    {
+      "id": "home-title",
+      "type": "Heading",
+      "content": "Site name",
+      "level": 1,
+      "parentId": "home-hero",
+      "bindings": { "content": "site.name" },
+      "styles": { "fontSize": "56px", "marginBottom": "16px" }
+    },
+    {
+      "id": "home-tagline",
+      "type": "Paragraph",
+      "content": "Stories, ideas, and updates from our team.",
+      "parentId": "home-hero",
+      "bindings": { "content": "site.tagline" },
+      "styles": { "fontSize": "20px", "lineHeight": 1.6 }
+    },
+    {
+      "id": "home-posts-heading",
+      "type": "Heading",
+      "content": "Latest stories",
+      "level": 2,
+      "styles": { "fontSize": "36px", "marginBottom": "24px" }
+    },
+    {
+      "id": "home-posts",
+      "type": "Collection List",
+      "content": { "limit": 6, "category": "" }
+    }
+  ]
+}

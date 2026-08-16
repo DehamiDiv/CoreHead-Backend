@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "1.0",
+  "kind": "blog-archive",
+  "name": "Magazine Blog Archive",
+  "metadata": {
+    "description": "A post collection used as the canonical Blog Archive fixture.",
+    "designStyle": "magazine",
+    "origin": "ai"
+  },
+  "blocks": [
+    {
+      "id": "archive-heading",
+      "type": "Heading",
+      "content": "Latest stories",
+      "level": 1,
+      "styles": { "fontSize": "40px", "marginBottom": "24px" }
+    },
+    {
+      "id": "archive-posts",
+      "type": "Collection List",
+      "content": { "limit": 12, "category": "" }
+    }
+  ]
+}
