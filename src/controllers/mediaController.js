@@ -1,7 +1,6 @@
-const { PrismaClient } = require('@prisma/client');
+const prisma = require('../models/prismaClient');
 const fs = require('fs');
 const path = require('path');
-const prisma = new PrismaClient();
 
 // Ensure uploads directory exists
 const UPLOADS_DIR = path.join(__dirname, '../../public/uploads');
@@ -9,11 +8,15 @@ const UPLOADS_DIR = path.join(__dirname, '../../public/uploads');
 exports.getMedia = async (req, res) => {
   try {
     const media = await prisma.media.findMany({
-      where: { isDeleted: false },
-      orderBy: { createdAt: 'desc' }
+      where: {
+        isDeleted: false,
+        siteId: req.siteId,
+      },
+      orderBy: { createdAt: 'desc' },
     });
     res.json(media);
   } catch (error) {
+    console.error(error);
     res.status(500).json({ error: 'Failed to fetch media' });
   }
 };
@@ -21,8 +24,11 @@ exports.getMedia = async (req, res) => {
 exports.getTrash = async (req, res) => {
   try {
     const media = await prisma.media.findMany({
-      where: { isDeleted: true },
-      orderBy: { updatedAt: 'desc' }
+      where: {
+        isDeleted: true,
+        siteId: req.siteId,
+      },
+      orderBy: { updatedAt: 'desc' },
     });
     res.json(media);
   } catch (error) {
@@ -38,31 +44,46 @@ exports.uploadMedia = async (req, res) => {
       return res.status(400).json({ error: 'No image data provided' });
     }
 
+    if (!req.siteId) {
+      return res.status(400).json({ error: 'Site context required (X-Site-Id).' });
+    }
+
     // Extract base64 data
     const matches = base64Data.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
     if (!matches || matches.length !== 3) {
       return res.status(400).json({ error: 'Invalid base64 data' });
     }
 
+    if (!fs.existsSync(UPLOADS_DIR)) {
+      fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+    }
+
     const buffer = Buffer.from(matches[2], 'base64');
-    const fileName = `${Date.now()}-${name.replace(/\s+/g, '-')}`;
+    const fileName = `${Date.now()}-${String(name || 'file').replace(/\s+/g, '-')}`;
     const filePath = path.join(UPLOADS_DIR, fileName);
 
     fs.writeFileSync(filePath, buffer);
 
+    // Always store relative path; frontend resolveMediaUrl → backend origin
     const url = `/uploads/${fileName}`;
 
     const media = await prisma.media.create({
       data: {
-        name,
-        type,
-        size,
+        name: name || fileName,
+        type: type || 'application/octet-stream',
+        size: size || String(buffer.length),
         url,
-        isDeleted: false
-      }
+        isDeleted: false,
+        siteId: req.siteId,
+      },
     });
 
-    res.status(201).json(media);
+    // Return both shapes for older clients (uploaded.media.url / uploaded.url)
+    res.status(201).json({
+      ...media,
+      url: media.url,
+      media,
+    });
   } catch (error) {
     console.error('Upload error:', error);
     res.status(500).json({ error: 'Failed to upload media', details: error.message });
@@ -72,9 +93,14 @@ exports.uploadMedia = async (req, res) => {
 exports.moveToTrash = async (req, res) => {
   try {
     const { id } = req.params;
+    const existing = await prisma.media.findFirst({
+      where: { id: parseInt(id, 10), siteId: req.siteId },
+    });
+    if (!existing) return res.status(404).json({ error: 'Media not found' });
+
     const media = await prisma.media.update({
-      where: { id: parseInt(id) },
-      data: { isDeleted: true }
+      where: { id: parseInt(id, 10) },
+      data: { isDeleted: true },
     });
     res.json(media);
   } catch (error) {
@@ -85,9 +111,14 @@ exports.moveToTrash = async (req, res) => {
 exports.restoreFromTrash = async (req, res) => {
   try {
     const { id } = req.params;
+    const existing = await prisma.media.findFirst({
+      where: { id: parseInt(id, 10), siteId: req.siteId },
+    });
+    if (!existing) return res.status(404).json({ error: 'Media not found' });
+
     const media = await prisma.media.update({
-      where: { id: parseInt(id) },
-      data: { isDeleted: false }
+      where: { id: parseInt(id, 10) },
+      data: { isDeleted: false },
     });
     res.json(media);
   } catch (error) {
@@ -98,8 +129,8 @@ exports.restoreFromTrash = async (req, res) => {
 exports.deletePermanently = async (req, res) => {
   try {
     const { id } = req.params;
-    const media = await prisma.media.findUnique({
-      where: { id: parseInt(id) }
+    const media = await prisma.media.findFirst({
+      where: { id: parseInt(id, 10), siteId: req.siteId },
     });
 
     if (media) {
@@ -108,9 +139,7 @@ exports.deletePermanently = async (req, res) => {
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
       }
-      await prisma.media.delete({
-        where: { id: parseInt(id) }
-      });
+      await prisma.media.delete({ where: { id: parseInt(id, 10) } });
     }
 
     res.json({ message: 'Media deleted permanently' });

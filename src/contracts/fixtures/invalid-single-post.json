@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "1.0",
+  "kind": "single-post",
+  "name": "Invalid Static Post",
+  "blocks": [
+    {
+      "id": "static-title",
+      "type": "Heading",
+      "content": "This title is not bound to CMS data"
+    },
+    {
+      "id": "unsupported-hero",
+      "type": "hero-section",
+      "content": "Unsupported legacy block"
+    }
+  ]
+}

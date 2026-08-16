@@ -1,0 +1,40 @@
+{
+  "schemaVersion": "1.0",
+  "kind": "single-post",
+  "name": "Editorial Single Post",
+  "metadata": {
+    "description": "A dynamic article layout used as the canonical Single Post fixture.",
+    "designStyle": "editorial",
+    "origin": "manual"
+  },
+  "blocks": [
+    {
+      "id": "post-cover",
+      "type": "Image",
+      "content": { "src": "", "alt": "Article cover" },
+      "bindings": { "content": "post.coverImage" },
+      "styles": { "borderRadius": "16px", "marginBottom": "24px" }
+    },
+    {
+      "id": "post-title",
+      "type": "Heading",
+      "content": "",
+      "level": 1,
+      "bindings": { "content": "post.title" },
+      "styles": { "fontSize": "42px", "fontWeight": 800, "marginBottom": "16px" }
+    },
+    {
+      "id": "post-excerpt",
+      "type": "Paragraph",
+      "content": "",
+      "bindings": { "content": "post.excerpt" },
+      "styles": { "fontStyle": "italic", "color": "#64748b", "marginBottom": "24px" }
+    },
+    {
+      "id": "post-body",
+      "type": "Paragraph",
+      "content": "",
+      "bindings": { "content": "post.contentHtml" }
+    }
+  ]
+}

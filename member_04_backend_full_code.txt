@@ -1,0 +1,134 @@
+/* ==========================================================================
+   MEMBER 04 - BACKEND CONTRIBUTION FULL CODE
+   Project: CoreHead AI Platform
+   ========================================================================== */
+
+// --- FILE: src/services/aiService.js ---
+const { Groq } = require('groq-sdk');
+const { z } = require('zod');
+const { randomUUID } = require('crypto');
+
+let groqClient = null;
+const getGroqClient = () => {
+  if (!groqClient && process.env.GROQ_API_KEY) {
+    try {
+      groqClient = new Groq({ apiKey: process.env.GROQ_API_KEY });
+    } catch (err) {
+      console.error('[Groq Client Init Error]', err.message);
+    }
+  }
+  return groqClient;
+};
+
+const aiService = {
+  async generateLayout(prompt) {
+    const GROQ_API_KEY = process.env.GROQ_API_KEY;
+    const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.1-8b-instant';
+    const groq = getGroqClient();
+
+    if (!groq) {
+      console.warn('No Groq client available. Using rule-based fallback.');
+      return { blocks: generateRuleBasedLayout(prompt), isFallback: true };
+    }
+
+    const systemPrompt = `You are a CMS layout generator for CoreHead. Return ONLY JSON object with "blocks" array.`;
+
+    try {
+      const chatCompletion = await groq.chat.completions.create({
+        messages: [{ role: 'system', content: systemPrompt }],
+        model: GROQ_MODEL,
+        response_format: { type: "json_object" }
+      });
+
+      const parsedResult = JSON.parse(chatCompletion.choices[0].message.content);
+      const layoutSchema = z.object({
+        blocks: z.array(z.object({
+          id: z.string().optional(),
+          type: z.enum(['Heading', 'Paragraph', 'Image', 'Quote', 'Divider', 'Button', 'Collection List']),
+          content: z.any(),
+          styles: z.any().optional()
+        }))
+      });
+
+      const validation = layoutSchema.safeParse(parsedResult);
+      if (!validation.success) throw new Error('Schema validation failed');
+
+      return { 
+        blocks: validation.data.blocks.map(b => ({ ...b, id: b.id || randomUUID() })), 
+        isFallback: false 
+      };
+    } catch (error) {
+      console.error('[AI Generation Error]', error.message);
+      return { blocks: generateRuleBasedLayout(prompt), isFallback: true };
+    }
+  }
+};
+
+function generateRuleBasedLayout(prompt) {
+  const id = () => randomUUID();
+  return [
+    { id: id(), type: 'Heading', content: prompt.slice(0, 50), styles: { textAlign: 'center', marginBottom: '30px' } },
+    { id: id(), type: 'Collection List', content: { limit: 6, category: '' }, styles: { marginBottom: '30px' } }
+  ];
+}
+
+module.exports = aiService;
+
+
+// --- FILE: src/routes/aiRoutes.js ---
+const express = require('express');
+const router = express.Router();
+const aiService = require('../services/aiService');
+const authMiddleware = require('../middlewares/authMiddleware');
+const rateLimit = require('express-rate-limit');
+
+const aiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { error: 'Too many requests, please slow down.' }
+});
+
+router.post('/generate-layout', aiLimiter, authMiddleware, async (req, res) => {
+  try {
+    const { prompt } = req.body;
+    if (!prompt || prompt.trim().length < 5) return res.status(400).json({ error: 'Invalid prompt' });
+    
+    const result = await aiService.generateLayout(prompt.trim());
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error('[Route Error]', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+module.exports = router;
+
+
+// --- FILE: src/controllers/postController.js (Relevant Excerpts) ---
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
+
+exports.getPosts = async (req, res) => {
+  try {
+    const { category, limit } = req.query;
+    const posts = await prisma.posts.findMany({
+      where: category ? { category: category } : {},
+      take: parseInt(limit) || 10,
+      orderBy: { created_at: 'desc' }
+    });
+    res.json({ success: true, posts });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch posts' });
+  }
+};
+
+
+// --- FILE: prisma/schema.prisma (Member 04 Model) ---
+model ai_layouts {
+  id               String   @id @default(uuid())
+  user_id          String
+  prompt           String
+  layout_type      String
+  generated_layout Json
+  created_at       DateTime @default(now())
+}
