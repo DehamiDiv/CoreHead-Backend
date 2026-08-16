@@ -127,7 +127,14 @@ const publishTemplate = async (id, userId, userRole, siteId) => {
     status: 'published',
     origin: template.layoutJson?.metadata?.origin || 'manual',
   });
-  return await templateRepo.publishTemplate(id, prepared.layoutJson);
+  await templateRepo.saveTemplateHistory(
+    template.id,
+    template.version,
+    template.layoutJson,
+    userId
+  );
+  const nextVersion = Number(template.version || 1) + 1;
+  return await templateRepo.publishTemplate(id, prepared.layoutJson, nextVersion);
 };
 
 const assignTemplate = async (id, assignData, userRole, siteId) => {
@@ -145,15 +152,26 @@ const assignTemplate = async (id, assignData, userRole, siteId) => {
   return await templateRepo.assignTemplate(id, categoryId, isGlobalDefault, siteId);
 };
 
-const resolveActiveLayout = async (templateType, categoryId, siteId = null) => {
+const resolveActiveLayout = async (
+  templateType,
+  categoryId,
+  siteId = null,
+  preferredTemplateId = null
+) => {
   if (!templateType) {
     throw new Error('templateType query parameter is required');
+  }
+  if (preferredTemplateId != null && preferredTemplateId !== '' && !siteId) {
+    throw new Error('siteId is required when resolving a post layout override');
   }
 
   const layout = await templateRepo.resolveActiveLayout(
     templateType,
     categoryId || null,
-    siteId != null && siteId !== '' ? Number(siteId) : null
+    siteId != null && siteId !== '' ? Number(siteId) : null,
+    preferredTemplateId != null && preferredTemplateId !== ''
+      ? Number(preferredTemplateId)
+      : null
   );
 
   if (!layout) {

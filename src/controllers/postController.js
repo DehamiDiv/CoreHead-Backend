@@ -8,6 +8,7 @@ const {
   publicPostWhere,
   buildPostStatusFields,
 } = require('../contracts/postPublication');
+const { validatePostLayoutOverride } = require('../services/postLayoutService');
 
 // Helper to format post with author details safely
 const formatPostData = (post) => {
@@ -70,6 +71,7 @@ exports.createPost = async (req, res) => {
       show_toc,
       allowComments,
       allow_comments,
+      layoutTemplateId,
     } = req.body;
 
     const allowCommentsFlag =
@@ -128,6 +130,10 @@ exports.createPost = async (req, res) => {
     const statusFields = buildPostStatusFields(status ?? POST_STATUS.DRAFT, {
       publishedDate: published_date,
     });
+    const resolvedLayoutTemplateId = await validatePostLayoutOverride(
+      layoutTemplateId,
+      req.siteId
+    );
 
     const post = await prisma.post.create({
       data: {
@@ -149,6 +155,7 @@ exports.createPost = async (req, res) => {
         structuredData: parsedStructuredData,
         showToc: showToc === true || showToc === 'true' || show_toc === true || show_toc === 'true',
         allowComments: allowCommentsValue,
+        layoutTemplateId: resolvedLayoutTemplateId ?? null,
         authorId: resolvedAuthorId,
         siteId: req.siteId,
         publishedAt: statusFields.publishedAt,
@@ -166,7 +173,7 @@ exports.createPost = async (req, res) => {
         .status(400)
         .json({ error: 'A post with this URL slug already exists on this site.' });
     }
-    res.status(500).json({ error: 'Failed to create post.', message: error.message });
+    res.status(error.statusCode || 500).json({ error: 'Failed to create post.', message: error.message });
   }
 };
 
@@ -338,6 +345,7 @@ exports.updatePost = async (req, res) => {
       metaDescription,
       canonicalUrl,
       structuredData,
+      layoutTemplateId,
     } = req.body;
     const userId = req.user.id;
     const userRole = req.user.role;
@@ -425,6 +433,13 @@ exports.updatePost = async (req, res) => {
       ...(structuredDataValue !== undefined && { structuredData: structuredDataValue || null }),
     };
 
+    if (layoutTemplateId !== undefined) {
+      data.layoutTemplateId = await validatePostLayoutOverride(
+        layoutTemplateId,
+        req.siteId
+      );
+    }
+
     if (status !== undefined) {
       Object.assign(
         data,
@@ -453,7 +468,7 @@ exports.updatePost = async (req, res) => {
         .status(400)
         .json({ error: 'A post with this URL slug already exists on this site.' });
     }
-    res.status(500).json({ error: 'Failed to update post.', message: error.message });
+    res.status(error.statusCode || 500).json({ error: 'Failed to update post.', message: error.message });
   }
 };
 

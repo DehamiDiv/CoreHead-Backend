@@ -3,6 +3,7 @@ const test = require('node:test');
 
 const { promoteAiLayout } = require('../src/services/aiLayoutPromotionService');
 const validSingle = require('../../contracts/fixtures/valid-single-post.json');
+const validHome = require('../../contracts/fixtures/valid-home-page.json');
 
 function createPromotionPrisma(history) {
   const calls = [];
@@ -84,6 +85,23 @@ test('promotion is idempotent after history is linked to a template', async () =
   assert.equal(first.template.id, second.template.id);
   assert.equal(second.alreadyPromoted, true);
   assert.equal(prisma.calls.filter((call) => call.operation === 'create').length, 1);
+});
+
+test('promotes an AI Home Page into a Home Page draft template', async () => {
+  const history = {
+    id: 18,
+    user_id: 4,
+    site_id: 8,
+    layout_type: 'home-page',
+    generated_layout: validHome,
+    promoted_template_id: null,
+  };
+  const prisma = createPromotionPrisma(history);
+  const result = await promoteAiLayout({ prisma, historyId: 18, userId: 4, siteId: 8 });
+
+  assert.equal(result.template.type, 'Home Page');
+  assert.equal(result.template.layoutJson.kind, 'home-page');
+  assert.equal(result.template.status, 'draft');
 });
 
 test('rejects cross-site and cross-user promotion attempts', async () => {

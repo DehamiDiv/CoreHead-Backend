@@ -28,6 +28,30 @@ test('normalizes a raw block array deterministically and infers archive kind', (
   assert.equal(validateLayoutDocumentV1(first.document).valid, true);
 });
 
+test('preserves an explicit Home Page kind and its site bindings', () => {
+  const result = normalizeLayoutDocumentV1([
+    { type: 'Heading', content: '{site.name}' },
+    { type: 'Paragraph', content: '{site.tagline}' },
+    { type: 'Collection List', content: { limit: 6, category: '' } },
+  ], { kind: 'home-page', name: 'Home' });
+
+  assert.equal(result.document.kind, 'home-page');
+  assert.equal(result.document.blocks[0].bindings.content, 'site.name');
+  assert.equal(result.document.blocks[1].bindings.content, 'site.tagline');
+  assert.equal(validateLayoutDocumentV1(result.document).valid, true);
+});
+
+test('normalizes legacy Home Page type aliases without changing the canonical kind', () => {
+  for (const type of ['Home Page', 'home_page', 'homepage', 'home-page']) {
+    const result = normalizeLayoutDocumentV1([
+      { id: 'site-name', type: 'Heading', content: '{site.name}' },
+      { id: 'posts', type: 'Collection List', content: { limit: 6, category: '' } },
+    ], { kind: type, name: 'Legacy Home' });
+    assert.equal(result.document.kind, 'home-page');
+    assert.equal(validateLayoutDocumentV1(result.document).valid, true);
+  }
+});
+
 test('converts legacy sections without losing hero image or CMS bindings', () => {
   const legacy = {
     version: '1.0',

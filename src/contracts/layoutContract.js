@@ -6,7 +6,7 @@ const {
 const { normalizeLayoutDocumentV1 } = require('../../../contracts/layout-normalizer-v1');
 
 const LAYOUT_SCHEMA_VERSION = '1.0';
-const LAYOUT_KINDS = Object.freeze(['single-post', 'blog-archive']);
+const LAYOUT_KINDS = Object.freeze(['single-post', 'blog-archive', 'home-page']);
 const LAYOUT_BLOCK_TYPES = Object.freeze([
   'Heading',
   'Paragraph',
@@ -41,6 +41,9 @@ const LAYOUT_BINDING_PATHS = Object.freeze([
   'site.name',
   'site.slug',
   'site.logo',
+  'site.description',
+  'site.tagline',
+  'site.heroImage',
 ]);
 
 module.exports = {

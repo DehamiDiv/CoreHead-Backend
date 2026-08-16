@@ -5,6 +5,7 @@ const prismaPath = require.resolve('../src/models/prismaClient');
 const calls = [];
 let findResult = null;
 let createResult = null;
+let templateResult = null;
 
 const prisma = {
   post: {
@@ -23,6 +24,12 @@ const prisma = {
     async delete(args) {
       calls.push({ operation: 'delete', args });
       return { id: args.where.id };
+    },
+  },
+  templates: {
+    async findFirst(args) {
+      calls.push({ operation: 'findTemplate', args });
+      return templateResult;
     },
   },
 };
@@ -55,6 +62,28 @@ function reset() {
   calls.length = 0;
   findResult = null;
   createResult = null;
+  templateResult = null;
+}
+
+function validSinglePostTemplate(overrides = {}) {
+  return {
+    id: 22,
+    siteId: 7,
+    name: 'Editorial Reading',
+    type: 'Single Post',
+    status: 'published',
+    layoutJson: {
+      schemaVersion: '1.0',
+      kind: 'single-post',
+      name: 'Editorial Reading',
+      blocks: [
+        { id: 'title', type: 'Heading', content: '', bindings: { content: 'post.title' } },
+        { id: 'body', type: 'Paragraph', content: '', bindings: { content: 'post.contentHtml' } },
+      ],
+      metadata: { origin: 'manual' },
+    },
+    ...overrides,
+  };
 }
 
 test('post creation ignores a forged body siteId and persists the verified request site', async () => {
@@ -82,6 +111,72 @@ test('post creation ignores a forged body siteId and persists the verified reque
   assert.equal(create.args.data.authorId, 31);
   assert.equal(create.args.data.status, 'Published');
   assert.equal(create.args.data.isPublished, true);
+});
+
+test('post creation accepts a published site-owned Single Post layout override', async () => {
+  reset();
+  templateResult = validSinglePostTemplate();
+  const res = responseRecorder();
+
+  await postController.createPost({
+    siteId: 7,
+    siteRole: 'AUTHOR',
+    user: { id: 31, role: 'user' },
+    body: {
+      title: 'Designed post',
+      slug: 'designed-post',
+      content: '<p>Readable body</p>',
+      layoutTemplateId: 22,
+    },
+  }, res);
+
+  assert.equal(res.statusCode, 201);
+  const templateLookup = calls.find((call) => call.operation === 'findTemplate');
+  assert.deepEqual(templateLookup.args.where, { id: 22, siteId: 7 });
+  const create = calls.find((call) => call.operation === 'create');
+  assert.equal(create.args.data.layoutTemplateId, 22);
+});
+
+test('post creation rejects a layout outside the selected site', async () => {
+  reset();
+  templateResult = null;
+  const res = responseRecorder();
+
+  await postController.createPost({
+    siteId: 7,
+    siteRole: 'OWNER',
+    user: { id: 31, role: 'user' },
+    body: {
+      title: 'Blocked post',
+      slug: 'blocked-post',
+      content: '<p>Body</p>',
+      layoutTemplateId: 999,
+    },
+  }, res);
+
+  assert.equal(res.statusCode, 404);
+  assert.equal(calls.some((call) => call.operation === 'create'), false);
+});
+
+test('post creation rejects an archive template as a post override', async () => {
+  reset();
+  templateResult = validSinglePostTemplate({ type: 'Blog Archive' });
+  const res = responseRecorder();
+
+  await postController.createPost({
+    siteId: 7,
+    siteRole: 'OWNER',
+    user: { id: 31, role: 'user' },
+    body: {
+      title: 'Wrong layout post',
+      slug: 'wrong-layout-post',
+      content: '<p>Body</p>',
+      layoutTemplateId: 22,
+    },
+  }, res);
+
+  assert.equal(res.statusCode, 400);
+  assert.equal(calls.some((call) => call.operation === 'create'), false);
 });
 
 test('public single-post lookup requires an explicit site context', async () => {

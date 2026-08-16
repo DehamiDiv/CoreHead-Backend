@@ -5,6 +5,10 @@ const {
 
 function templateTypeToKind(type) {
   const normalized = String(type || '').trim().toLowerCase();
+  const normalizedWords = normalized.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (normalizedWords === 'home' || normalizedWords.includes('home page') || normalizedWords.includes('homepage')) {
+    return 'home-page';
+  }
   if (normalized.includes('archive') || normalized.includes('loop') || normalized.includes('collection') || normalized === 'list') {
     return 'blog-archive';
   }
@@ -12,6 +16,7 @@ function templateTypeToKind(type) {
 }
 
 function kindToTemplateType(kind) {
+  if (kind === 'home-page') return 'Home Page';
   return kind === 'blog-archive' ? 'Blog Archive' : 'Single Post';
 }
 

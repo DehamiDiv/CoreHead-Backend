@@ -12,7 +12,12 @@ test('maps legacy and canonical template type names', () => {
   assert.equal(templateTypeToKind('Single Post'), 'single-post');
   assert.equal(templateTypeToKind('Archive'), 'blog-archive');
   assert.equal(templateTypeToKind('blog-loop'), 'blog-archive');
+  assert.equal(templateTypeToKind('Home Page'), 'home-page');
+  assert.equal(templateTypeToKind('homepage'), 'home-page');
+  assert.equal(templateTypeToKind('home_page'), 'home-page');
+  assert.equal(templateTypeToKind('home-page'), 'home-page');
   assert.equal(kindToTemplateType('blog-archive'), 'Blog Archive');
+  assert.equal(kindToTemplateType('home-page'), 'Home Page');
 });
 
 test('normalizes a legacy manual layout before persistence', () => {
@@ -54,6 +59,19 @@ test('rejects publishing an archive without a collection', () => {
     ], { name: 'Invalid Archive', type: 'Blog Archive', status: 'published' }),
     { name: 'LayoutValidationError' },
   );
+});
+
+test('persists a manual Home Page draft and enforces publication semantics', () => {
+  const draft = prepareTemplateLayout([
+    { id: 'heading', type: 'Heading', content: 'Work in progress' },
+  ], { name: 'Custom Home', type: 'Home Page', status: 'draft' });
+  assert.equal(draft.layoutJson.kind, 'home-page');
+
+  const published = prepareTemplateLayout([
+    { id: 'site-name', type: 'Heading', content: '', bindings: { content: 'site.name' } },
+    { id: 'posts', type: 'Collection List', content: { limit: 6, category: '' } },
+  ], { name: 'Custom Home', type: 'Home Page', status: 'published' });
+  assert.equal(published.layoutJson.kind, 'home-page');
 });
 
 test('assignment accepts only published, semantically valid templates', () => {

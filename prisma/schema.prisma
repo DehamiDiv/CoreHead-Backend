@@ -8,18 +8,18 @@ datasource db {
 }
 
 model ai_layouts {
-  id               Int       @id @default(autoincrement())
-  user_id          Int?
-  site_id          Int?
-  prompt           String
-  layout_type      String?   @db.VarChar(50)
-  design_style     String?   @db.VarChar(50)
-  features         Json?
-  generated_layout Json
-  promoted_template_id Int?      @unique
-  created_at       DateTime? @default(now()) @db.Timestamp(6)
-  site             Site?     @relation(fields: [site_id], references: [id], onDelete: Cascade)
-  promoted_template templates? @relation("AiLayoutPromotion", fields: [promoted_template_id], references: [id], onDelete: SetNull)
+  id                   Int        @id @default(autoincrement())
+  user_id              Int?
+  site_id              Int?
+  prompt               String
+  layout_type          String?    @db.VarChar(50)
+  design_style         String?    @db.VarChar(50)
+  features             Json?
+  generated_layout     Json
+  promoted_template_id Int?       @unique
+  created_at           DateTime?  @default(now()) @db.Timestamp(6)
+  site                 Site?      @relation(fields: [site_id], references: [id], onDelete: Cascade)
+  promoted_template    templates? @relation("AiLayoutPromotion", fields: [promoted_template_id], references: [id], onDelete: SetNull)
 
   @@index([site_id], map: "idx_ai_layouts_site")
   @@index([promoted_template_id], map: "idx_ai_layouts_promoted_template")
@@ -67,37 +67,37 @@ model categories {
 }
 
 model User {
-  id                   Int               @id @default(autoincrement())
-  email                String            @unique
+  id                   Int          @id @default(autoincrement())
+  email                String       @unique
   password             String?
   name                 String?
-  role                 String            @default("user")
-  status               String            @default("active")
-  provider             String            @default("local")
+  role                 String       @default("user")
+  status               String       @default("active")
+  provider             String       @default("local")
   providerId           String?
   resetPasswordToken   String?
   resetPasswordExpires DateTime?
-  isEmailVerified      Boolean           @default(false)
+  isEmailVerified      Boolean      @default(false)
   emailVerificationOTP String?
   /// Profile image URL or path (not raw base64 preferred). Text allows longer media paths.
-  avatar               String?           @db.Text
+  avatar               String?      @db.Text
   bio                  String?
   designation          String?
   nicename             String?
-  subscription_status  String            @default("FREE")
+  subscription_status  String       @default("FREE")
   stripe_customer_id   String?
-  ai_credits           Int               @default(5)
-  ai_credits_used      Int               @default(0)
-  last_credits_reset   DateTime          @default(now())
-  createdAt            DateTime          @default(now())
-  updatedAt            DateTime          @updatedAt
+  ai_credits           Int          @default(5)
+  ai_credits_used      Int          @default(0)
+  last_credits_reset   DateTime     @default(now())
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
   binding              Binding[]
   posts                Post[]
   templates            templates[]
   comments             Comment[]
-  ownedSites           Site[]            @relation("SiteOwner")
+  ownedSites           Site[]       @relation("SiteOwner")
   siteMemberships      SiteMember[]
-  sentSiteInvites      SiteInvite[]      @relation("SiteInviteSender")
+  sentSiteInvites      SiteInvite[] @relation("SiteInviteSender")
 
   @@map("users")
 }
@@ -106,38 +106,38 @@ model User {
 /// Public URL slug is unique platform-wide (e.g. /s/{slug}).
 /// R6: optional customDomain + plan/billing fields (Stripe not required for demo).
 model Site {
-  id        Int      @id @default(autoincrement())
-  name      String   @db.VarChar(255)
-  slug      String   @unique @db.VarChar(100)
-  ownerId   Int
-  status    String   @default("active") @db.VarChar(20)
-  logo      String?  @db.VarChar(500)
+  id                Int       @id @default(autoincrement())
+  name              String    @db.VarChar(255)
+  slug              String    @unique @db.VarChar(100)
+  ownerId           Int
+  status            String    @default("active") @db.VarChar(20)
+  logo              String?   @db.VarChar(500)
   /// e.g. blog.acme.com — unique when set; served via host rewrite
-  customDomain       String?   @unique @db.VarChar(255)
+  customDomain      String?   @unique @db.VarChar(255)
   /// unconfigured | pending | verified
-  domainStatus       String    @default("unconfigured") @db.VarChar(20)
-  domainVerifyToken  String?   @db.VarChar(64)
+  domainStatus      String    @default("unconfigured") @db.VarChar(20)
+  domainVerifyToken String?   @db.VarChar(64)
   /// free | premium | enterprise
-  plan               String    @default("free") @db.VarChar(20)
+  plan              String    @default("free") @db.VarChar(20)
   /// active | trial | canceled
-  planStatus         String    @default("active") @db.VarChar(20)
-  planUpdatedAt      DateTime? @db.Timestamp(6)
-  createdAt DateTime @default(now()) @db.Timestamp(6)
-  updatedAt DateTime @updatedAt @db.Timestamp(6)
+  planStatus        String    @default("active") @db.VarChar(20)
+  planUpdatedAt     DateTime? @db.Timestamp(6)
+  createdAt         DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt         DateTime  @updatedAt @db.Timestamp(6)
 
-  owner           User              @relation("SiteOwner", fields: [ownerId], references: [id], onDelete: Restrict)
-  members         SiteMember[]
-  invites         SiteInvite[]
-  posts           Post[]
-  categories      categories[]
-  media           media[]
-  templates       templates[]
-  settings        Setting[]
-  bindings        Binding[]
-  pageLayouts     PageLayout[]
-  pages           Page[]
-  builderLayouts  builder_layouts[]
-  aiLayouts       ai_layouts[]
+  owner          User              @relation("SiteOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  members        SiteMember[]
+  invites        SiteInvite[]
+  posts          Post[]
+  categories     categories[]
+  media          media[]
+  templates      templates[]
+  settings       Setting[]
+  bindings       Binding[]
+  pageLayouts    PageLayout[]
+  pages          Page[]
+  builderLayouts builder_layouts[]
+  aiLayouts      ai_layouts[]
 
   @@index([ownerId], map: "idx_sites_owner")
   @@index([status], map: "idx_sites_status")
@@ -188,21 +188,22 @@ model SiteInvite {
 }
 
 model templates {
-  id         Int               @id @default(autoincrement())
-  name       String
-  type       String
-  category   String?
-  status     String            @default("draft")
-  layoutJson Json
-  authorId   Int
-  siteId     Int?
-  version    Int               @default(1)
-  createdAt  DateTime          @default(now())
-  updatedAt  DateTime          @updatedAt
-  author     User              @relation(fields: [authorId], references: [id])
-  site       Site?             @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  history    TemplateHistory[]
-  aiLayoutSource ai_layouts?     @relation("AiLayoutPromotion")
+  id             Int               @id @default(autoincrement())
+  name           String
+  type           String
+  category       String?
+  status         String            @default("draft")
+  layoutJson     Json
+  authorId       Int
+  siteId         Int?
+  version        Int               @default(1)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  author         User              @relation(fields: [authorId], references: [id])
+  site           Site?             @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  history        TemplateHistory[]
+  aiLayoutSource ai_layouts?       @relation("AiLayoutPromotion")
+  postOverrides  Post[]            @relation("PostLayoutTemplate")
 
   @@index([siteId], map: "idx_templates_site")
   @@map("Template")
@@ -219,35 +220,37 @@ model TemplateHistory {
 }
 
 model Post {
-  id              Int       @id @default(autoincrement())
-  title           String    @db.VarChar(255)
-  slug            String    @db.VarChar(255)
-  excerpt         String?
-  content         String
+  id               Int            @id @default(autoincrement())
+  title            String         @db.VarChar(255)
+  slug             String         @db.VarChar(255)
+  excerpt          String?
+  content          String
   /// Was VarChar(500); base64 data-URLs exceeded limit and broke post updates
-  coverImage      String?   @db.Text
-  category        String?   @db.VarChar(100)
-  categories      String?
-  tags            String[]
-  keywords        String?
-  metaTitle       String?
-  metaDescription String?
-  canonicalUrl    String?
-  structuredData  String?
-  isPublished     Boolean   @default(false)
-  publishedAt     DateTime? @db.Timestamp(6)
-  status          String    @default("published") @db.VarChar(20)
-  featured        Boolean?  @default(false)
-  showToc         Boolean   @default(false)
-  allowComments   Boolean   @default(true)
-  authorId        Int
-  siteId          Int?
-  createdAt       DateTime? @default(now()) @db.Timestamp(6)
-  updatedAt       DateTime? @default(now()) @updatedAt @db.Timestamp(6)
-  author          User      @relation(fields: [authorId], references: [id])
-  site            Site?     @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  comments        Comment[]
-  reactions       PostReaction[]
+  coverImage       String?        @db.Text
+  category         String?        @db.VarChar(100)
+  categories       String?
+  tags             String[]
+  keywords         String?
+  metaTitle        String?
+  metaDescription  String?
+  canonicalUrl     String?
+  structuredData   String?
+  isPublished      Boolean        @default(false)
+  publishedAt      DateTime?      @db.Timestamp(6)
+  status           String         @default("published") @db.VarChar(20)
+  featured         Boolean?       @default(false)
+  showToc          Boolean        @default(false)
+  allowComments    Boolean        @default(true)
+  layoutTemplateId Int?
+  authorId         Int
+  siteId           Int?
+  createdAt        DateTime?      @default(now()) @db.Timestamp(6)
+  updatedAt        DateTime?      @default(now()) @updatedAt @db.Timestamp(6)
+  author           User           @relation(fields: [authorId], references: [id])
+  site             Site?          @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  layoutTemplate   templates?     @relation("PostLayoutTemplate", fields: [layoutTemplateId], references: [id], onDelete: SetNull)
+  comments         Comment[]
+  reactions        PostReaction[]
 
   @@unique([siteId, slug], map: "uq_posts_site_slug")
   @@index([authorId], map: "idx_posts_author")
@@ -255,6 +258,7 @@ model Post {
   @@index([publishedAt], map: "idx_posts_published_date")
   @@index([status], map: "idx_posts_status")
   @@index([siteId], map: "idx_posts_site")
+  @@index([layoutTemplateId], map: "idx_posts_layout_template")
 }
 
 model Binding {
@@ -315,8 +319,8 @@ model Comment {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  post       Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
-  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  post Post  @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@map("comments")
 }
@@ -378,14 +382,14 @@ model DemoRequest {
 }
 
 model Payment {
-  id         Int      @id @default(autoincrement())
-  userId     Int      @map("user_id")
-  orderId    String   @unique @map("order_id") @db.VarChar(100)
-  paymentId  String?  @map("payment_id") @db.VarChar(100)
-  amount     Decimal  @db.Decimal(10, 2)
-  currency   String   @default("LKR") @db.VarChar(10)
-  status     String   @default("pending") @db.VarChar(20)
-  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  orderId   String   @unique @map("order_id") @db.VarChar(100)
+  paymentId String?  @map("payment_id") @db.VarChar(100)
+  amount    Decimal  @db.Decimal(10, 2)
+  currency  String   @default("LKR") @db.VarChar(10)
+  status    String   @default("pending") @db.VarChar(20)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
 
   @@map("payments")
 }

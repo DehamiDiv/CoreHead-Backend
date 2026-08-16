@@ -109,12 +109,13 @@ const assignTemplate = async (req, res) => {
 
 const resolveActiveLayout = async (req, res) => {
   try {
-    const { templateType, categoryId } = req.query;
+    const { templateType, categoryId, templateId } = req.query;
     const siteId = getSiteIdFromRequest(req);
     const layout = await templateService.resolveActiveLayout(
       templateType,
       categoryId,
-      siteId
+      siteId,
+      templateId
     );
     res.status(200).json(layout);
   } catch (error) {

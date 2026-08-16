@@ -7,6 +7,7 @@ const { assertAssignableTemplate } = require('../src/contracts/templateLayout');
 const { prepareRenderableLayout } = require('../../contracts/renderable-layout-v1');
 const validSingle = require('../../contracts/fixtures/valid-single-post.json');
 const validArchive = require('../../contracts/fixtures/valid-blog-archive.json');
+const validHome = require('../../contracts/fixtures/valid-home-page.json');
 
 function provider(document) {
   return {
@@ -150,4 +151,8 @@ test('AI Single Post completes generate, promote, publish, assign, resolve, and 
 
 test('AI Blog Archive completes generate, promote, publish, assign, resolve, and render preparation', async () => {
   await runWorkflow(validArchive, 'blog-archive');
+});
+
+test('AI Home Page completes generate, promote, publish, assign, resolve, and render preparation', async () => {
+  await runWorkflow(validHome, 'home-page');
 });

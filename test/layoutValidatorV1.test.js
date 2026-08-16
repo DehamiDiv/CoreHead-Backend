@@ -7,15 +7,17 @@ const {
 } = require('../src/contracts/layoutContract');
 const validSingle = require('../../contracts/fixtures/valid-single-post.json');
 const validArchive = require('../../contracts/fixtures/valid-blog-archive.json');
+const validHome = require('../../contracts/fixtures/valid-home-page.json');
 const invalidSingle = require('../../contracts/fixtures/invalid-single-post.json');
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-test('validates canonical Single Post and Blog Archive fixtures', () => {
+test('validates canonical Single Post, Blog Archive, and Home Page fixtures', () => {
   assert.equal(validateLayoutDocumentV1(validSingle).valid, true);
   assert.equal(validateLayoutDocumentV1(validArchive).valid, true);
+  assert.equal(validateLayoutDocumentV1(validHome).valid, true);
 });
 
 test('rejects unknown blocks and missing Single Post bindings', () => {
@@ -26,6 +28,28 @@ test('rejects unknown blocks and missing Single Post bindings', () => {
   assert.ok(codes.includes('block.unsupported_type'));
   assert.ok(codes.includes('semantic.single_post_title'));
   assert.ok(codes.includes('semantic.single_post_content'));
+});
+
+test('requires site identity and a published-post collection when publishing a Home Page', () => {
+  const document = clone(validHome);
+  document.blocks = document.blocks.filter(
+    (block) => block.bindings?.content !== 'site.name' && block.type !== 'Collection List',
+  );
+
+  const published = validateLayoutDocumentV1(document);
+  const codes = published.errors.map((error) => error.code);
+  assert.ok(codes.includes('semantic.home_page_site_name'));
+  assert.ok(codes.includes('semantic.home_page_collection'));
+  assert.equal(validateLayoutDocumentV1(document, { semantic: false }).valid, true);
+});
+
+test('warns when a Home Page has no dynamic tagline or description', () => {
+  const document = clone(validHome);
+  document.blocks = document.blocks.filter((block) => block.bindings?.content !== 'site.tagline');
+  const result = validateLayoutDocumentV1(document);
+
+  assert.equal(result.valid, true);
+  assert.ok(result.warnings.some((warning) => warning.code === 'semantic.home_page_description_optional'));
 });
 
 test('rejects duplicate IDs, missing parents, invalid styles, and invalid bindings', () => {

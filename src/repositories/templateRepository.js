@@ -61,10 +61,15 @@ const deleteTemplate = async (id) => {
   });
 };
 
-const publishTemplate = async (id, layoutJson) => {
+const publishTemplate = async (id, layoutJson, newVersion) => {
   return await prisma.templates.update({
     where: { id: parseInt(id, 10) },
-    data: { status: 'published', ...(layoutJson ? { layoutJson } : {}) },
+    data: {
+      status: 'published',
+      ...(layoutJson ? { layoutJson } : {}),
+      ...(newVersion != null ? { version: newVersion } : {}),
+      updatedAt: new Date(),
+    },
   });
 };
 
@@ -96,6 +101,13 @@ const typeAliases = (templateType) => {
     'collection',
     'list',
   ];
+  const homeKeys = [
+    'home',
+    'home page',
+    'homepage',
+    'home-page',
+    'home_page',
+  ];
 
   if (singleKeys.includes(key) || key.includes('single')) {
     return [
@@ -116,6 +128,16 @@ const typeAliases = (templateType) => {
       'blog_loop',
       'blog-archive',
       'blog_archive',
+    ];
+  }
+  if (homeKeys.includes(key) || key.includes('home page') || key.includes('homepage')) {
+    return [
+      raw,
+      'Home Page',
+      'home',
+      'homepage',
+      'home-page',
+      'home_page',
     ];
   }
   return [raw, templateType].filter(Boolean);
@@ -165,13 +187,34 @@ const assignTemplate = async (id, categoryId, isGlobalDefault, siteId = null) =>
   });
 };
 
-const resolveActiveLayout = async (templateType, categoryId, siteId = null) => {
+const resolveActiveLayout = async (
+  templateType,
+  categoryId,
+  siteId = null,
+  preferredTemplateId = null
+) => {
   const siteFilter = siteId != null ? { siteId: Number(siteId) } : {};
   const types = typeAliases(templateType);
   const published = {
     status: { in: ['published', 'Published'] },
   };
 
+  // 0) Explicit per-post override. It must still be published, match the
+  // requested kind family, and belong to the resolved tenant site.
+  if (preferredTemplateId != null && siteId != null) {
+    const preferredId = Number(preferredTemplateId);
+    if (Number.isInteger(preferredId) && preferredId > 0) {
+      const preferred = await prisma.templates.findFirst({
+        where: {
+          id: preferredId,
+          type: { in: types },
+          ...published,
+          ...siteFilter,
+        },
+      });
+      if (preferred) return preferred;
+    }
+  }
   // 1) category-specific published template
   if (categoryId) {
     const specific = await prisma.templates.findFirst({

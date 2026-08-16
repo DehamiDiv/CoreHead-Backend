@@ -59,6 +59,70 @@ function generateRuleBasedLayout(prompt, options = {}) {
     };
   }
 
+  if (kind === 'home-page') {
+    blocks.push(
+      {
+        id: id(),
+        type: 'Container',
+        content: '',
+        styles: { padding: '72px 24px', maxWidth: '1120px' },
+      },
+    );
+    const heroId = blocks[0].id;
+    blocks.push(
+      {
+        id: id(),
+        type: 'Heading',
+        content: 'Site name',
+        level: 1,
+        parentId: heroId,
+        bindings: { content: 'site.name' },
+        styles: { fontSize: '56px', marginBottom: '18px' },
+      },
+      {
+        id: id(),
+        type: 'Paragraph',
+        content: `Stories, ideas, and updates about ${topic}.`,
+        parentId: heroId,
+        bindings: { content: 'site.tagline' },
+        styles: { fontSize: '20px', lineHeight: '1.6', maxWidth: '720px' },
+      },
+      {
+        id: id(),
+        type: 'Heading',
+        content: 'Latest stories',
+        level: 2,
+        styles: { fontSize: '34px', marginTop: '48px', marginBottom: '24px' },
+      },
+      {
+        id: id(),
+        type: 'Collection List',
+        content: { limit: 6, category: '' },
+        styles: { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '24px' },
+      },
+    );
+    if (lower.includes('subscribe') || lower.includes('newsletter')) {
+      blocks.push({
+        id: id(),
+        type: 'Newsletter',
+        content: {
+          title: 'Join the newsletter',
+          description: 'Get new stories delivered to your inbox.',
+          buttonText: 'Subscribe',
+          placeholder: 'you@example.com',
+        },
+        styles: { marginTop: '56px', padding: '36px', borderRadius: '18px' },
+      });
+    }
+    return {
+      schemaVersion: '1.0',
+      kind,
+      name: options.name || `${toTitleCase(topic)} Home`,
+      blocks,
+      metadata: { designStyle: options.designStyle || 'modern', origin: 'ai' },
+    };
+  }
+
   // Blog Archive fallback
   blocks.push({
     id: id(),
@@ -198,7 +262,9 @@ function buildLayoutSystemPrompt(options = {}) {
   const kind = templateTypeToKind(options.layoutType || options.kind);
   const semanticRules = kind === 'single-post'
     ? 'The document MUST contain bindings.content="post.title" and bindings.content="post.contentHtml". Use post.coverImage for a dynamic cover when an Image is included. Do not add a Collection List unless explicitly requested.'
-    : 'The document MUST contain at least one Collection List block with content.limit from 1 to 50 and a string content.category.';
+    : kind === 'home-page'
+      ? 'The document MUST contain bindings.content="site.name" and at least one Collection List block for published posts. Prefer site.tagline or site.description for supporting copy.'
+      : 'The document MUST contain at least one Collection List block with content.limit from 1 to 50 and a string content.category.';
   return [
     'You generate CoreHead CMS layouts.',
     'Return exactly one JSON object and no markdown or explanation.',
@@ -206,7 +272,7 @@ function buildLayoutSystemPrompt(options = {}) {
     `Use design style "${String(options.designStyle || 'modern')}".`,
     `Requested optional features: ${JSON.stringify(options.features || {})}.`,
     semanticRules,
-    'Use dynamic bindings for CMS values. Do not put {post.title} placeholder strings in content.',
+    'Use dynamic bindings for CMS values. Do not put placeholder strings such as {post.title} or {site.name} in content.',
     'Use unique string IDs. parentId may only reference a Container or Columns block. Never emit scripts, event handlers, javascript: URLs, arbitrary CSS properties, or undocumented fields.',
     'The following JSON Schema is the complete LayoutDocument v1 contract:',
     JSON.stringify(layoutDocumentV1Schema),
@@ -241,7 +307,7 @@ function prepareAiLayoutResponse(rawText, options = {}) {
   let normalized;
   try {
     normalized = normalizeLayoutDocumentV1(parsed, {
-      name: parsed?.name || options.name || (kind === 'blog-archive' ? 'AI Blog Archive' : 'AI Single Post'),
+      name: parsed?.name || options.name || (kind === 'blog-archive' ? 'AI Blog Archive' : kind === 'home-page' ? 'AI Home Page' : 'AI Single Post'),
       kind,
       origin: 'ai',
       designStyle: options.designStyle || 'modern',

@@ -21,10 +21,14 @@ async function promoteAiLayout({ prisma, historyId, userId, siteId, name }) {
     if (existing) return { template: existing, alreadyPromoted: true };
   }
 
+  const generatedKind = history.generated_layout?.kind;
+  const requestedKind = String(history.layout_type || generatedKind || 'single-post');
   const type = kindToTemplateType(
-    String(history.layout_type || '').toLowerCase().includes('archive')
-      ? 'blog-archive'
-      : 'single-post',
+    requestedKind === 'home-page' || requestedKind.toLowerCase().includes('home')
+      ? 'home-page'
+      : requestedKind.toLowerCase().includes('archive')
+        ? 'blog-archive'
+        : 'single-post',
   );
   const templateName = String(name || history.generated_layout?.name || `AI ${type}`).trim();
   if (!templateName) throw serviceError('Template name is required.', 400);
