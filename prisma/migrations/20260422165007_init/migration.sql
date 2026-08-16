@@ -1,14 +1,6 @@
--- CreateTable
-CREATE TABLE "User" (
-    "id" SERIAL NOT NULL,
-    "email" TEXT NOT NULL,
-    "password" TEXT NOT NULL,
-    "role" TEXT NOT NULL DEFAULT 'user',
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "User_pkey" PRIMARY KEY ("id")
-);
+-- AlterTable
+ALTER TABLE "User"
+ADD COLUMN "role" TEXT NOT NULL DEFAULT 'user';
 
 -- CreateTable
 CREATE TABLE "Template" (
