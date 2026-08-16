@@ -55,8 +55,9 @@ const register = async (req, res) => {
         }
 
         // Deep Email Validation (Check for typos, disposable emails, and MX records)
-        // ONLY run in production to prevent blocking local development/test emails
-        if (process.env.NODE_ENV === 'production') {
+        // Always run, but allow developer test domains (like test.com, example.com, localhost)
+        const isDevDomain = email.endsWith('@example.com') || email.endsWith('@test.com') || email.endsWith('@localhost');
+        if (!isDevDomain) {
             try {
                 const validationResult = await validate.validate(email);
                 if (!validationResult.valid) {

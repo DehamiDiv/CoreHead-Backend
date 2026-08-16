@@ -30,7 +30,7 @@ const parseSettingValue = (raw) => {
 };
 
 const { mergeBranding } = require('../utils/themePresets');
-const { extractHomeStyle } = require('../../../contracts/appearance-model-v1');
+const extractHomeStyle = (layout) => { if (!layout) return "classic"; if (typeof layout === "string") { try { const parsed = JSON.parse(layout); return parsed.homeStyle || parsed.style || "classic"; } catch { return layout || "classic"; } }; return layout.homeStyle || layout.style || "classic"; };
 
 const loadPublicBranding = async (siteId) => {
   try {
