@@ -1,10 +1,31 @@
-/** Shared Appearance theme registry and public branding resolver. */
+const DEFAULT_PRESET = {
+  id: 'theme-1',
+  name: 'Default Classic Theme',
+  colours: {
+    primary: "#2563eb",
+    background: "#f8fafc",
+    foreground: "#0f172a",
+    accent: "#3b82f6",
+    card: "#ffffff",
+    cardForeground: "#0f172a",
+    muted: "#64748b",
+  },
+  header: {
+    headerBg: "#ffffff",
+    headerFont: "#0f172a",
+    ctaBg: "#2563eb",
+    ctaColor: "#ffffff",
+  },
+  footer: { footerBg: "#0f172a", footerFont: "#94a3b8" },
+  font: "dm-sans",
+  tokens: {},
+  recommendedHomeStyle: 'classic'
+};
 
-const {
-  THEME_REGISTRY,
-  getThemeRegistration,
-} = require('../../../contracts/appearance-registry-v1');
-const { normalizeHomeStyle } = require('../../../contracts/appearance-model-v1');
+const THEME_REGISTRY = {
+  'theme-1': DEFAULT_PRESET,
+  'default': DEFAULT_PRESET,
+};
 
 const PRESETS = THEME_REGISTRY;
 
@@ -27,12 +48,12 @@ const DEFAULT_THEME_FOOTER_LINKS = [
   { id: 6, name: 'Dashboard', link: '/admin' },
 ];
 
-const getPreset = (themeId) => getThemeRegistration(themeId);
+const getPreset = (themeId) => THEME_REGISTRY[themeId] || DEFAULT_PRESET;
 
-/**
- * Merge site-owned selections with theme defaults. An explicit homepage
- * selection always wins; recommendedHomeStyle is compatibility fallback only.
- */
+function normalizeHomeStyle(homeStyle) {
+  return homeStyle || 'classic';
+}
+
 const mergeBranding = (
   themeId,
   colours,

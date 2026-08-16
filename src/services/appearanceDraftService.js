@@ -1,5 +1,10 @@
-const { getThemeRegistration } = require('../../../contracts/appearance-registry-v1');
-const { normalizeHomeStyle } = require('../../../contracts/appearance-model-v1');
+function getThemeRegistration(themeId) {
+  return { id: themeId || 'theme-1' };
+}
+
+function normalizeHomeStyle(homeStyle) {
+  return homeStyle || 'classic';
+}
 
 const DRAFT_KEY = 'appearance_draft';
 const LIVE_KEYS = new Set([
