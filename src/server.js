@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
+const { ensureUploadsDir } = require('./config/mediaStorage');
 
 // ── Routes ──
 const authRoutes = require('./routes/authRoutes');
@@ -38,7 +38,7 @@ app.use((req, res, next) => {
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Serve static uploads
-app.use('/uploads', express.static(path.join(__dirname, '../public/uploads')));
+app.use('/uploads', express.static(ensureUploadsDir()));
 
 // ── Health Check ──
 app.get('/', (req, res) => {
