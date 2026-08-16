@@ -8,6 +8,7 @@ const emailPath = require.resolve('../src/services/emailService');
 
 const site = { id: 17, name: 'Tenant site', slug: 'tenant-site', ownerId: 10 };
 let membership = null;
+let sitesForUser = [];
 
 require.cache[repositoryPath] = {
   id: repositoryPath,
@@ -20,6 +21,9 @@ require.cache[repositoryPath] = {
     async findMembership(siteId, userId) {
       if (Number(siteId) !== site.id || !membership) return null;
       return Number(userId) === membership.userId ? membership : null;
+    },
+    async findSitesForUser() {
+      return sitesForUser;
     },
     async updateSite(id, data) {
       return { ...site, id: Number(id), ...data };
@@ -44,6 +48,26 @@ const siteService = require('../src/services/siteService');
 
 test.beforeEach(() => {
   membership = null;
+  sitesForUser = [];
+});
+
+test('site list exposes OWNER for the site owner', async () => {
+  sitesForUser = [{ ...site, members: [] }];
+
+  const [result] = await siteService.listMySites(site.ownerId);
+
+  assert.equal(result.siteRole, 'OWNER');
+});
+
+test('site list exposes the selected-site membership role', async () => {
+  sitesForUser = [{
+    ...site,
+    members: [{ siteId: site.id, userId: 22, role: 'EDITOR' }],
+  }];
+
+  const [result] = await siteService.listMySites(22);
+
+  assert.equal(result.siteRole, 'EDITOR');
 });
 
 test('site owner can resolve the protected dashboard site', async () => {

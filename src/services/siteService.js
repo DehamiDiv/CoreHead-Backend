@@ -308,8 +308,22 @@ const createSite = async (userId, { name, slug, logo }) => {
   });
 };
 
+const resolveSiteRole = (site, userId) => {
+  if (Number(site?.ownerId) === Number(userId)) return 'OWNER';
+
+  const membership = Array.isArray(site?.members)
+    ? site.members.find((member) => Number(member.userId) === Number(userId))
+    : null;
+
+  return membership?.role || null;
+};
+
 const listMySites = async (userId) => {
-  return siteRepository.findSitesForUser(userId);
+  const sites = await siteRepository.findSitesForUser(userId);
+  return sites.map((site) => ({
+    ...site,
+    siteRole: resolveSiteRole(site, userId),
+  }));
 };
 
 const getSiteById = async (id, userId, userRole) => {
@@ -1140,6 +1154,7 @@ const updatePlan = async (siteId, userId, userRole, { plan, planStatus }) => {
 module.exports = {
   createSite,
   listMySites,
+  resolveSiteRole,
   getSiteById,
   getSiteBySlug,
   updateSite,
