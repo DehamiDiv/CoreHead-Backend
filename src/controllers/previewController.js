@@ -38,6 +38,7 @@ const getPreviewPosts = async (req, res) => {
         excerpt: true,
         coverImage: true,
         category: true,
+        tags: true,
         status: true,
         isPublished: true,
         siteId: true,
