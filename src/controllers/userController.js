@@ -2,6 +2,34 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 const bcrypt = require('bcryptjs');
 const authService = require('../services/authService');
+const { isPlatformAdmin } = require('../utils/siteScope');
+
+function authorizeUserUpdate(caller, rawTargetId, body = {}) {
+  const targetId = Number.parseInt(String(rawTargetId), 10);
+  if (!Number.isFinite(targetId) || targetId <= 0) {
+    throw Object.assign(new Error('Invalid user ID.'), { statusCode: 400 });
+  }
+
+  const platformAdmin = isPlatformAdmin(caller?.role);
+  if (!platformAdmin && Number(caller?.id) !== targetId) {
+    throw Object.assign(new Error('You can only update your own profile.'), {
+      statusCode: 403,
+    });
+  }
+
+  const restrictedFields = ['email', 'role', 'password', 'status'];
+  const requestedRestrictedField = restrictedFields.find(
+    (field) => body[field] !== undefined,
+  );
+  if (!platformAdmin && requestedRestrictedField) {
+    throw Object.assign(
+      new Error(`Only an administrator can update ${requestedRestrictedField}.`),
+      { statusCode: 403 },
+    );
+  }
+
+  return targetId;
+}
 
 /**
  * Prefer short media URLs over giant base64 data-URLs in the avatar column.
@@ -167,6 +195,7 @@ exports.getAllUsers = async (req, res) => {
 exports.updateUser = async (req, res) => {
   try {
     const { id } = req.params;
+    const targetId = authorizeUserUpdate(req.user, id, req.body);
     const { email, role, password, name, status, avatar, nicename, designation, bio } = req.body;
 
     const dataToUpdate = {};
@@ -191,7 +220,7 @@ exports.updateUser = async (req, res) => {
     }
 
     const updatedUser = await prisma.user.update({
-      where: { id: parseInt(id, 10) },
+      where: { id: targetId },
       data: dataToUpdate,
       select: {
         id: true,
@@ -232,5 +261,7 @@ exports.deleteUser = async (req, res) => {
     res.status(500).json({ success: false, message: 'Server error deleting user' });
   }
 };
+
+exports.authorizeUserUpdate = authorizeUserUpdate;
 
 exports.provisionInvitedUser = provisionInvitedUser;
