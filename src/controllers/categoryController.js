@@ -15,7 +15,7 @@ exports.getCategories = async (req, res) => {
 
 exports.createCategory = async (req, res) => {
   try {
-    const { name, slug, description } = req.body;
+    const { name, slug, description, parentId } = req.body;
 
     if (!name || !slug) {
       return res.status(400).json({ success: false, message: 'Name and slug are required' });
@@ -35,11 +35,14 @@ exports.createCategory = async (req, res) => {
       });
     }
 
+    const parsedParentId = parentId ? parseInt(parentId, 10) : null;
+
     const newCategory = await prisma.categories.create({
       data: {
         name,
         slug,
         description,
+        parentId: Number.isFinite(parsedParentId) ? parsedParentId : null,
         siteId: req.siteId,
       },
     });
@@ -60,7 +63,7 @@ exports.createCategory = async (req, res) => {
 exports.updateCategory = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, slug, description } = req.body;
+    const { name, slug, description, parentId } = req.body;
 
     const existing = await prisma.categories.findFirst({
       where: { id: parseInt(id, 10), siteId: req.siteId },
@@ -69,9 +72,21 @@ exports.updateCategory = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Category not found' });
     }
 
+    const parsedParentId =
+      parentId !== undefined
+        ? parentId
+          ? parseInt(parentId, 10)
+          : null
+        : undefined;
+
     const updatedCategory = await prisma.categories.update({
       where: { id: parseInt(id, 10) },
-      data: { name, slug, description },
+      data: {
+        ...(name !== undefined && { name }),
+        ...(slug !== undefined && { slug }),
+        ...(description !== undefined && { description }),
+        ...(parsedParentId !== undefined && { parentId: parsedParentId }),
+      },
     });
 
     return res.status(200).json({ success: true, category: updatedCategory });
