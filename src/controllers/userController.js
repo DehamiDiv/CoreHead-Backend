@@ -1,6 +1,7 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 const bcrypt = require('bcryptjs');
+const authService = require('../services/authService');
 
 /**
  * Prefer short media URLs over giant base64 data-URLs in the avatar column.
@@ -35,57 +36,100 @@ const userListSelect = {
   createdAt: true,
 };
 
+async function provisionInvitedUser(
+  { email, password, role, name, nicename, designation, bio, avatar },
+  {
+    prismaClient = prisma,
+    bcryptLib = bcrypt,
+    verificationService = authService,
+  } = {}
+) {
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  if (!normalizedEmail || !password) {
+    throw Object.assign(new Error('Email and password are required'), {
+      statusCode: 400,
+    });
+  }
+
+  const existingUser = await prismaClient.user.findUnique({
+    where: { email: normalizedEmail },
+  });
+  if (existingUser) {
+    throw Object.assign(new Error('User already exists'), { statusCode: 400 });
+  }
+
+  const salt = await bcryptLib.genSalt(10);
+  const hashedPassword = await bcryptLib.hash(password, salt);
+  const avatarValue = normalizeAvatar(avatar);
+
+  const newUser = await prismaClient.user.create({
+    data: {
+      email: normalizedEmail,
+      password: hashedPassword,
+      role: role || 'Editor',
+      name,
+      nicename,
+      designation,
+      bio,
+      avatar: avatarValue,
+      isEmailVerified: false,
+      status: 'active',
+      provider: 'local',
+    },
+  });
+
+  const verification = await verificationService.resendVerificationOtp(
+    normalizedEmail
+  );
+
+  return {
+    user: newUser,
+    emailResult: verification.emailResult,
+  };
+}
+
 exports.inviteUser = async (req, res) => {
   try {
     const { email, password, role, name, nicename, designation, bio, avatar } = req.body;
-    
-    if (!email || !password) {
-      return res.status(400).json({ success: false, message: 'Email and password are required' });
-    }
 
-    // Check if user already exists
-    const existingUser = await prisma.user.findUnique({ where: { email } });
-    if (existingUser) {
-      return res.status(400).json({ success: false, message: 'User already exists' });
-    }
-
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
-    let avatarValue = null;
-    try {
-      avatarValue = normalizeAvatar(avatar);
-    } catch (e) {
-      return res.status(e.statusCode || 400).json({ success: false, message: e.message });
-    }
-
-    const newUser = await prisma.user.create({
-      data: {
-        email,
-        password: hashedPassword,
-        role: role || 'Editor',
-        name,
-        nicename,
-        designation,
-        bio,
-        avatar: avatarValue,
-      }
+    const { user: newUser, emailResult } = await provisionInvitedUser({
+      email,
+      password,
+      role,
+      name,
+      nicename,
+      designation,
+      bio,
+      avatar,
     });
 
     return res.status(201).json({
       success: true,
-      message: 'User created successfully',
+      message: emailResult?.sent
+        ? 'User created. A verification code was sent to their email.'
+        : 'User created, but the verification email could not be delivered.',
+      emailSent: !!emailResult?.sent,
+      emailProvider: emailResult?.provider || null,
+      emailError: emailResult?.error || null,
       user: {
         id: newUser.id,
         email: newUser.email,
         role: newUser.role,
-        name: newUser.name
-      }
+        name: newUser.name,
+        isEmailVerified: !!newUser.isEmailVerified,
+      },
     });
 
   } catch (error) {
     console.error('Invite user error:', error);
-    res.status(500).json({ success: false, message: 'Server error during user creation: ' + error.message });
+    const status = error.statusCode || 500;
+    res.status(status).json({
+      success: false,
+      message:
+        status < 500
+          ? error.message
+          : 'Server error during user creation: ' + error.message,
+    });
   }
 };
 
@@ -188,3 +232,5 @@ exports.deleteUser = async (req, res) => {
     res.status(500).json({ success: false, message: 'Server error deleting user' });
   }
 };
+
+exports.provisionInvitedUser = provisionInvitedUser;

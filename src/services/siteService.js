@@ -532,7 +532,7 @@ const inviteMember = async (siteId, actorId, actorRole, { email, role }) => {
       message: emailResult.sent
         ? `${normalizedEmail} was added as ${inviteRole}. Real email sent to their inbox.`
         : `${normalizedEmail} was added as ${inviteRole}. ${emailResult.error ||
-        'No real email was sent — configure SMTP in backend .env'
+        'No real email was sent — configure RESEND_API_KEY and EMAIL_FROM'
         }`,
     };
   }
