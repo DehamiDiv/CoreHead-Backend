@@ -274,6 +274,7 @@ function buildLayoutSystemPrompt(options = {}) {
     semanticRules,
     'Use dynamic bindings for CMS values. Do not put placeholder strings such as {post.title} or {site.name} in content.',
     'Use unique string IDs. parentId may only reference a Container or Columns block. Never emit scripts, event handlers, javascript: URLs, arbitrary CSS properties, or undocumented fields.',
+    'CRITICAL: The ONLY allowed block types (the "type" field) are: "Heading", "Paragraph", "Image", "Quote", "Divider", "Button", "Container", "Columns", "Collection List", "Video", "Spacer". DO NOT invent any other block types.',
     'The following JSON Schema is the complete LayoutDocument v1 contract:',
     JSON.stringify(layoutDocumentV1Schema),
   ].join('\n');
@@ -345,6 +346,7 @@ function prepareAiLayoutResponse(rawText, options = {}) {
 const aiService = {
   async generateLayout(prompt, options = {}) {
     const GROQ_API_KEY = process.env.GROQ_API_KEY;
+    console.log("generateLayout called. GROQ_API_KEY exists?", !!GROQ_API_KEY);
     const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.1-8b-instant';
     const kind = templateTypeToKind(options.layoutType || options.kind);
     const generationOptions = {
@@ -354,6 +356,7 @@ const aiService = {
       designStyle: options.designStyle || 'modern',
     };
     const makeFallback = () => {
+      console.log("FALLING BACK TO RULE-BASED LAYOUT");
       const layout = generateRuleBasedLayout(prompt, generationOptions);
       const validation = validateLayoutDocumentV1(layout);
       if (!validation.valid) {
@@ -410,7 +413,8 @@ const aiService = {
       }
 
       if (!prepared.validation.valid) {
-        console.warn('AI response failed canonical validation after repair. Using fallback.');
+        console.warn('AI response failed canonical validation after repair. Errors:', prepared.validation.errors);
+        console.log("FALLING BACK TO RULE-BASED LAYOUT");
         return makeFallback();
       }
 
