@@ -1,9 +1,10 @@
 const prisma = require('../models/prismaClient');
 const fs = require('fs');
-const path = require('path');
-
-// Ensure uploads directory exists
-const UPLOADS_DIR = path.join(__dirname, '../../public/uploads');
+const {
+  createUploadFileName,
+  ensureUploadsDir,
+  getUploadFilePath,
+} = require('../config/mediaStorage');
 
 exports.getMedia = async (req, res) => {
   try {
@@ -54,14 +55,11 @@ exports.uploadMedia = async (req, res) => {
       return res.status(400).json({ error: 'Invalid base64 data' });
     }
 
-    if (!fs.existsSync(UPLOADS_DIR)) {
-      fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-    }
-
     const buffer = Buffer.from(matches[2], 'base64');
-    const fileName = `${Date.now()}-${String(name || 'file').replace(/\s+/g, '-')}`;
-    const filePath = path.join(UPLOADS_DIR, fileName);
+    const fileName = createUploadFileName(name);
+    const filePath = getUploadFilePath(fileName);
 
+    ensureUploadsDir();
     fs.writeFileSync(filePath, buffer);
 
     // Always store relative path; frontend resolveMediaUrl → backend origin
@@ -134,8 +132,7 @@ exports.deletePermanently = async (req, res) => {
     });
 
     if (media) {
-      const fileName = media.url.split('/').pop();
-      const filePath = path.join(UPLOADS_DIR, fileName);
+      const filePath = getUploadFilePath(media.url);
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
       }
