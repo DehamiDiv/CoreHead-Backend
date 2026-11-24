@@ -21,6 +21,9 @@ const commentRoutes = require('./routes/commentRoutes');
 const siteRoutes = require('./routes/siteRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
 const newsletterRoutes = require('./routes/newsletterRoutes');
+const formRoutes = require('./routes/formRoutes');
+const analyticsRoutes = require('./routes/analyticsRoutes');
+const newsletterController = require('./controllers/newsletterController');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -77,6 +80,8 @@ app.use('/api/reactions', require('./routes/reactionRoutes'));
 app.use('/api/sites', siteRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/newsletter', newsletterRoutes);
+app.use('/api/forms', formRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 // R1-3: public invite preview + accept (auth on accept)
 const siteController = require('./controllers/siteController');
@@ -88,4 +93,8 @@ app.post('/api/invites/:token/accept', authMiddleware, siteController.acceptInvi
 // Trigger reboot
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
+  // Poll every 60s for due scheduled newsletter campaigns
+  setInterval(() => {
+    newsletterController.processScheduledCampaigns();
+  }, 60 * 1000);
 });
