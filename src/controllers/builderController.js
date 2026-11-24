@@ -151,10 +151,81 @@ const deleteLayout = async (req, res) => {
   }
 };
 
+// ── Reusable Saved Sections ──
+const getSavedSections = async (req, res) => {
+  try {
+    const sections = await prisma.savedSection.findMany({
+      where: { siteId: req.siteId },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json({ sections });
+  } catch (error) {
+    console.error('Get saved sections error:', error);
+    res.status(500).json({ error: 'Failed to load saved sections' });
+  }
+};
+
+const createSavedSection = async (req, res) => {
+  try {
+    const { name, category, blocks } = req.body || {};
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ error: 'Section name is required' });
+    }
+    if (!Array.isArray(blocks) || blocks.length === 0) {
+      return res.status(400).json({ error: 'Section blocks array is required' });
+    }
+
+    const section = await prisma.savedSection.create({
+      data: {
+        name: String(name).trim().slice(0, 255),
+        category: category ? String(category).trim().slice(0, 80) : 'Custom',
+        blocks,
+        siteId: req.siteId,
+        userId: req.user.id,
+      },
+    });
+    res.status(201).json({ section });
+  } catch (error) {
+    console.error('Create saved section error:', error);
+    res.status(500).json({ error: 'Failed to save section' });
+  }
+};
+
+const deleteSavedSection = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const existing = await prisma.savedSection.findFirst({
+      where: { id, siteId: req.siteId },
+    });
+    if (!existing) {
+      return res.status(404).json({ error: 'Saved section not found' });
+    }
+
+    const siteRole = String(req.siteRole || '').toUpperCase();
+    const canDelete =
+      isPlatformAdmin(req.user.role) ||
+      existing.userId === req.user.id ||
+      siteRole === 'OWNER' ||
+      siteRole === 'EDITOR';
+    if (!canDelete) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    await prisma.savedSection.delete({ where: { id } });
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Delete saved section error:', error);
+    res.status(500).json({ error: 'Failed to delete saved section' });
+  }
+};
+
 module.exports = {
   saveLayout,
   getLayouts,
   getLayoutById,
   updateLayout,
   deleteLayout,
+  getSavedSections,
+  createSavedSection,
+  deleteSavedSection,
 };

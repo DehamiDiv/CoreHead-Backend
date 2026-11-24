@@ -14,4 +14,8 @@ router.get('/layouts/:id', builderController.getLayoutById);
 router.put('/layouts/:id', builderController.updateLayout);
 router.delete('/layouts/:id', builderController.deleteLayout);
 
+router.get('/sections', builderController.getSavedSections);
+router.post('/sections', builderController.createSavedSection);
+router.delete('/sections/:id', builderController.deleteSavedSection);
+
 module.exports = router;
