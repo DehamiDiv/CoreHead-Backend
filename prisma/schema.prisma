@@ -98,9 +98,10 @@ model User {
   posts                Post[]
   templates            templates[]
   comments             Comment[]
-  ownedSites           Site[]       @relation("SiteOwner")
+  ownedSites           Site[]         @relation("SiteOwner")
   siteMemberships      SiteMember[]
-  sentSiteInvites      SiteInvite[] @relation("SiteInviteSender")
+  sentSiteInvites      SiteInvite[]   @relation("SiteInviteSender")
+  savedSections        SavedSection[]
 
   @@map("users")
 }
@@ -139,8 +140,13 @@ model Site {
   bindings       Binding[]
   pageLayouts    PageLayout[]
   pages          Page[]
-  builderLayouts builder_layouts[]
-  aiLayouts      ai_layouts[]
+  builderLayouts  builder_layouts[]
+  aiLayouts       ai_layouts[]
+  savedSections   SavedSection[]
+  formSubmissions FormSubmission[]
+  postViews       PostView[]
+  subscribers     NewsletterSubscription[]
+  campaigns       NewsletterCampaign[]
 
   @@index([ownerId], map: "idx_sites_owner")
   @@index([status], map: "idx_sites_status")
@@ -244,6 +250,7 @@ model Post {
   featured         Boolean?       @default(false)
   showToc          Boolean        @default(false)
   allowComments    Boolean        @default(true)
+  views            Int            @default(0)
   layoutTemplateId Int?
   authorId         Int
   siteId           Int?
@@ -254,6 +261,7 @@ model Post {
   layoutTemplate   templates?     @relation("PostLayoutTemplate", fields: [layoutTemplateId], references: [id], onDelete: SetNull)
   comments         Comment[]
   reactions        PostReaction[]
+  postViews        PostView[]
 
   @@unique([siteId, slug], map: "uq_posts_site_slug")
   @@index([authorId], map: "idx_posts_author")
@@ -400,7 +408,77 @@ model Payment {
 model NewsletterSubscription {
   id        Int      @id @default(autoincrement())
   email     String   @unique
+  siteId    Int?     @map("site_id")
+  status    String   @default("active") @db.VarChar(30)
   createdAt DateTime @default(now()) @db.Timestamp(6)
+  site      Site?    @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
+  @@index([siteId], map: "idx_newsletter_site")
   @@map("newsletter_subscriptions")
+}
+
+model NewsletterCampaign {
+  id             Int       @id @default(autoincrement())
+  siteId         Int?      @map("site_id")
+  subject        String    @db.VarChar(255)
+  contentHtml    String    @map("content_html") @db.Text
+  status         String    @default("draft") @db.VarChar(30)
+  scheduledAt    DateTime? @map("scheduled_at") @db.Timestamp(6)
+  sentAt         DateTime? @map("sent_at") @db.Timestamp(6)
+  recipientCount Int       @default(0) @map("recipient_count")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamp(6)
+  site           Site?     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId], map: "idx_newsletter_campaigns_site")
+  @@index([status, scheduledAt], map: "idx_newsletter_campaigns_schedule")
+  @@map("newsletter_campaigns")
+}
+
+model PostView {
+  id       Int      @id @default(autoincrement())
+  postId   Int      @map("post_id")
+  siteId   Int?     @map("site_id")
+  referrer String?  @db.VarChar(500)
+  viewedAt DateTime @default(now()) @map("viewed_at") @db.Timestamp(6)
+  post     Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  site     Site?    @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId, viewedAt], map: "idx_post_views_site_date")
+  @@index([postId, viewedAt], map: "idx_post_views_post_date")
+  @@map("post_views")
+}
+
+model SavedSection {
+  id        Int      @id @default(autoincrement())
+  name      String   @db.VarChar(255)
+  category  String   @default("Custom") @db.VarChar(80)
+  blocks    Json
+  siteId    Int?     @map("site_id")
+  userId    Int?     @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
+  site      Site?    @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([siteId], map: "idx_saved_sections_site")
+  @@index([userId], map: "idx_saved_sections_user")
+  @@map("saved_sections")
+}
+
+model FormSubmission {
+  id        Int      @id @default(autoincrement())
+  siteId    Int?     @map("site_id")
+  formTitle String?  @map("form_title") @db.VarChar(255)
+  name      String   @db.VarChar(255)
+  email     String   @db.VarChar(255)
+  subject   String?  @db.VarChar(255)
+  message   String   @db.Text
+  status    String   @default("unread") @db.VarChar(30)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  site      Site?    @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId], map: "idx_form_submissions_site")
+  @@index([status], map: "idx_form_submissions_status")
+  @@map("form_submissions")
 }
