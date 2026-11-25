@@ -318,8 +318,9 @@ const requestPasswordReset = async (email) => {
     const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}`;
     console.log(`[AUTH] Password Reset Link for ${normalizedEmail}: ${resetUrl}`);
 
+    let emailResult = { sent: false, realDelivery: false };
     try {
-        await emailService.sendEmail({
+        emailResult = await emailService.sendEmail({
             to: normalizedEmail,
             subject: 'Password Reset Request - CoreHead',
             text: `You requested a password reset. Please click here: ${resetUrl}`,
@@ -339,6 +340,12 @@ const requestPasswordReset = async (email) => {
     } catch (emailError) {
         console.error("Email sending failed during password reset:", emailError.message);
     }
+
+    const realDelivery = Boolean(emailResult?.sent && emailResult?.realDelivery !== false);
+    return {
+        realDelivery,
+        devResetPath: !realDelivery && allowDevOtpInResponse() ? `/reset-password?token=${resetToken}` : null,
+    };
 };
 
 const resetPassword = async (token, newPassword) => {

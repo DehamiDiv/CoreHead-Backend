@@ -274,11 +274,16 @@ const forgotPassword = async (req, res) => {
         }
 
         email = String(email).trim().toLowerCase();
-        await authService.requestPasswordReset(email);
+        const result = await authService.requestPasswordReset(email);
 
-        res.status(200).json({
-            message: 'If an account with that email exists, a password reset link has been sent.'
-        });
+        const payload = {
+            message: 'If an account with that email exists, a password reset link has been sent.',
+        };
+        if (result?.devResetPath) {
+            payload.devResetUrl = result.devResetPath;
+        }
+
+        res.status(200).json(payload);
     } catch (error) {
         res.status(400).json({ error: error.message });
     }
