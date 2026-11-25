@@ -36,6 +36,7 @@ function buildOtpEmailHtml(otp) {
  * Whether it's safe to return the OTP in the API response (local/dev only).
  */
 function allowDevOtpInResponse() {
+    if (process.env.ALLOW_DEV_OTP === 'true') return true;
     return process.env.NODE_ENV !== 'production';
 }
 
